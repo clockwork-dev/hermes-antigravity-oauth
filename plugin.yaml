@@ -1,0 +1,10 @@
+name: antigravity-oauth
+version: 1.1.0
+description: Secure OAuth subscription model provider for Google Antigravity via the official agy CLI (persistent stream-json worker, zero-exfiltration keyring/token verification, isolated HOME, and native Hermes auth/setup integration)
+author: cesar
+kind: model-provider
+requires_hermes: ">=0.21.4"
+external_dependencies:
+  - command: agy
+    purpose: "Google Antigravity CLI binary used as the OAuth-authenticated model backend"
+    install_hint: "Install Google Antigravity (https://antigravity.google/download) and sign in via 'agy acp --login' or 'hermes auth add antigravity-oauth'"

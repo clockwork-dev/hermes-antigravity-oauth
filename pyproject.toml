@@ -1,0 +1,10 @@
+[project]
+name = "hermes-antigravity-oauth"
+version = "1.1.0"
+description = "Secure Google Antigravity OAuth model-provider plugin for Hermes Agent"
+readme = "README.md"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
