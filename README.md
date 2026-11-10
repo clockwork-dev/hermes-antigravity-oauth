@@ -88,60 +88,66 @@ A high-performance `model-provider` plugin for **[Hermes Agent](https://github.c
 
 ## 📦 Installation & Setup
 
-### For Linux / Debian / Ubuntu (Bare-metal, VPS, Proxmox LXC)
+### 1. Install Plugin (One-Command via Hermes CLI)
 
-1. **Clone the plugin repository**:
-   ```bash
-   # Under your hermes user (e.g. su - hermes)
-   mkdir -p ~/.hermes/plugins
-   git clone https://github.com/clockwork-dev/hermes-antigravity-oauth.git ~/.hermes/plugins/antigravity-oauth
-   ```
+Run directly in your terminal:
+```bash
+hermes plugins install clockwork-dev/hermes-antigravity-oauth --enable
+```
 
-2. **Validate the plugin integrity**:
-   ```bash
-   hermes plugins validate ~/.hermes/plugins/antigravity-oauth
-   ```
-   *(Must report: `Validation passed.`)*
-
-3. **Link your Google Antigravity account**:
-   ```bash
-   hermes auth add antigravity-oauth
-   ```
-   *Open the generated Google OAuth URL in your browser, approve access, and paste the confirmation code back into the terminal.*
-
-4. **Restart Hermes background services**:
-   ```bash
-   # If running the web dashboard:
-   systemctl --user restart hermes-dashboard.service
-
-   # Or if running the gateway daemon:
-   hermes gateway restart
-   ```
+> [!NOTE]
+> If your repository is **private**, pass the SSH or authenticated URL instead:
+> ```bash
+> hermes plugins install git@github.com:clockwork-dev/hermes-antigravity-oauth.git --enable
+> ```
 
 ---
 
-### For Windows (PowerShell)
+### 2. Authenticate Google Antigravity OAuth
 
-1. **Clone the plugin**:
-   ```powershell
-   $dir = "$env:USERPROFILE\.hermes\plugins\antigravity-oauth"
-   git clone https://github.com/clockwork-dev/hermes-antigravity-oauth.git $dir
-   ```
+Link your subscription to Hermes:
+```bash
+hermes auth add antigravity-oauth
+```
+*Open the generated Google OAuth URL in your browser, approve access, and paste the confirmation code back into your terminal.*
 
-2. **Validate the plugin**:
-   ```powershell
-   hermes plugins validate "$env:USERPROFILE\.hermes\plugins\antigravity-oauth"
-   ```
+---
 
-3. **Authenticate via OAuth**:
-   ```powershell
-   hermes auth add antigravity-oauth
-   ```
+### 3. Restart Background Services (If Running)
 
-4. **Restart gateway service** (if running):
-   ```powershell
-   hermes gateway restart
-   ```
+If Hermes is running as a daemon or web dashboard, restart it so the newly registered provider is loaded into memory:
+
+- **Linux (Web Dashboard Service)**:
+  ```bash
+  systemctl --user restart hermes-dashboard.service
+  ```
+- **Windows / CLI (Gateway Daemon)**:
+  ```bash
+  hermes gateway restart
+  ```
+
+---
+
+<details>
+<summary><b>🛠️ Manual Installation (For Plugin Development / Git Clone)</b></summary>
+<br>
+
+If you prefer to clone the repository manually for development:
+
+**Linux / Debian / Ubuntu / macOS**:
+```bash
+mkdir -p ~/.hermes/plugins
+git clone https://github.com/clockwork-dev/hermes-antigravity-oauth.git ~/.hermes/plugins/antigravity-oauth
+hermes plugins validate ~/.hermes/plugins/antigravity-oauth
+```
+
+**Windows (PowerShell)**:
+```powershell
+$dir = "$env:USERPROFILE\.hermes\plugins\antigravity-oauth"
+git clone https://github.com/clockwork-dev/hermes-antigravity-oauth.git $dir
+hermes plugins validate "$env:USERPROFILE\.hermes\plugins\antigravity-oauth"
+```
+</details>
 
 ---
 
