@@ -9,3 +9,10 @@ build/
 *.egg-info/
 .DS_Store
 Thumbs.db
+*.env
+*.env.*
+*.token
+*oauth*token*
+*.key
+*.pem
+*.secret
