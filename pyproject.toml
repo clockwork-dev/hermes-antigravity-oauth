@@ -1,9 +1,48 @@
 [project]
 name = "hermes-antigravity-oauth"
 version = "1.1.0"
-description = "Secure Google Antigravity OAuth model-provider plugin for Hermes Agent"
+description = "Hermes Agent model-provider plugin for Google Antigravity OAuth subscriptions (Gemini 4 Argon, Claude 5.5, GPT-OSS)"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "cesar" },
+]
+keywords = [
+    "hermes-agent",
+    "hermes",
+    "antigravity",
+    "google-antigravity",
+    "gemini",
+    "claude",
+    "oauth",
+    "model-provider",
+    "llm",
+    "ai-agent",
+    "agy",
+    "gemini-4-argon",
+    "gemini-3.8-flash",
+    "claude-opus-5-5",
+    "claude-sonnet-5-5",
+    "antigravity-subscription-directsdk",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://github.com/clockwork-dev/hermes-antigravity-oauth"
+Repository = "https://github.com/clockwork-dev/hermes-antigravity-oauth.git"
+Issues = "https://github.com/clockwork-dev/hermes-antigravity-oauth/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,206 +1,230 @@
-# Hermes Antigravity OAuth Plugin (`antigravity-oauth`)
+# hermes-antigravity-oauth
 
-[![Hermes Compatibility](https://img.shields.io/badge/Hermes%20Agent-%3E%3D0.21.4-blue.svg)](https://github.com/nousresearch/hermes-agent)
-[![Platform Support](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20macOS-green.svg)](#installation)
-[![Security](https://img.shields.io/badge/Security-Zero--Exfiltration-brightgreen.svg)](#security--architecture)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+A model-provider plugin for [Nous Research Hermes Agent](https://github.com/nousresearch/hermes-agent) that enables inference through an active **Google Antigravity** subscription using the official `agy` CLI binary.
 
-A high-performance, cross-platform model-provider plugin for **[Hermes Agent](https://github.com/nousresearch/hermes-agent)** that connects your **Google Antigravity** subscription (Gemini 4 Argon, Gemini 3.8 Flash, Claude 5.5, GPT-OSS) via official OAuth through the `agy` CLI.
+Supports **Gemini 4 Argon**, **Gemini 3.8 Flash**, **Claude Sonnet 5.5**, **Claude Opus 5.5**, and **GPT-OSS 120B** on Linux, Windows, and macOS.
+
+```
+┌────────────────────────────────────────────────────────┐
+│                   Hermes Agent Core                    │
+│   (Session Worker, Tool Router, Approvals Gate)        │
+└──────────────────────────┬─────────────────────────────┘
+                           │ ProviderProfile IPC
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│        hermes-antigravity-oauth (Provider Plugin)      │
+│   - Token Isolation (~/.hermes/antigravity-oauth/)     │
+│   - Persistent stream-json Worker Lifecycle            │
+│   - Environment Sanitizer (Zero-Exfiltration)          │
+└──────────────────────────┬─────────────────────────────┘
+                           │ stdin / stdout (JSON lines)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│             Google Antigravity CLI (agy)               │
+│   - Local Language Server & Model Transport            │
+│   - OAuth Session Custody                              │
+└──────────────────────────┬─────────────────────────────┘
+                           │ HTTPS / gRPC
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│               Google Antigravity Service               │
+│   (Gemini 4 Argon · Gemini 3.8 Flash · Claude 5.5)     │
+└────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 🚀 Key Advantages Over Generic SDKs
+## Technical Characteristics
 
-- **⚡ Zero Cold-Start Latency**: Keeps a persistent background `stream-json` worker process alive across conversation turns, eliminating the ~2s cold-start overhead of repeated CLI invocations.
-- **🎯 Full Reasoning Effort Support**: Directly integrated with Hermes's interactive reasoning effort picker (`low`, `medium`, `high`) without duplicate model variants or catalog clutter.
-- **🔒 Zero-Exfiltration Security**: The plugin **never reads, copies, or uploads** your secret OAuth tokens into Python memory. Tokens remain managed by the official binary inside an isolated sandbox.
-- **👤 Multi-Account Isolation**: Uses a dedicated profile directory (`~/.hermes/antigravity-oauth/`), allowing Hermes to run on a dedicated Google account without disturbing your personal `agy` CLI or Antigravity IDE configuration.
-- **🛡️ Native Tool Interception**: Intercepts any attempted host-level tool execution from `agy` and routes it through Hermes's permission and sandboxing system.
-- **🔄 Cross-Platform Ready**: Tested out of the box on **Windows 11** (PowerShell), **Debian / Ubuntu Linux** (headless SSH, Proxmox LXC, systemd), and **macOS**.
+- **Warm Worker Pool**: Maintains a persistent background `stream-json` process over `stdin`/`stdout`. Subsequent turns avoid language-server initialization latency (~1.5–2.5s per turn in standard oneshot implementations).
+- **Reasoning Effort Integration**: Maps Hermes's native `/model` reasoning effort (`low`, `medium`, `high`) to underlying model capabilities via `build_api_kwargs_extras` and `supported_reasoning_efforts`. No duplicated `-low`/`-medium` pseudo-models in the picker catalog.
+- **Zero-Exfiltration Isolation**: Secrets are never loaded into Python runtime memory. The plugin points `agy` to an isolated profile root (`~/.hermes/antigravity-oauth/`) via symlinked or permission-restricted file descriptors, leaving host keyring entries intact.
+- **Strict Environment Sanitization**: Strips dynamic loader variables (`LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`), external script paths (`PYTHONPATH`), API keys, and external proxies before spawning child CLI processes.
+- **Native Tool Sandboxing**: Monitors execution for host tool invocations from `agy`. If the CLI attempts to run host-level operations directly, the call is intercepted, terminated, and translated into Hermes tool requests subject to user permissions.
 
 ---
 
-## 📋 Prerequisites
+## Comparison with `antigravity-subscription-directsdk`
 
-Before installing the plugin, ensure you have:
+| Feature | `antigravity-subscription-directsdk` | `hermes-antigravity-oauth` (This Plugin) |
+| :--- | :--- | :--- |
+| **Execution Architecture** | One-shot process per prompt (high latency) | Persistent warm `stream-json` worker with mutex locking |
+| **Model Catalog** | Static legacy list (`gemini-3.1-pro`, `claude-4-6`) | Dynamic `agy models` discovery + modern defaults (`gemini-4-argon`, `claude-5-5`) |
+| **Reasoning Effort UX** | Cluttered picker (`model-low`, `model-medium`) | Clean base names + native Hermes reasoning selector |
+| **Profile Isolation** | Uses host global `~/.gemini` or OS keyring | Dedicated profile (`~/.hermes/antigravity-oauth/`), multi-account ready |
+| **Token Refresh Sync** | Manual / session-bound | Automatic bidirectional sync across isolated workspaces |
+| **Cross-Platform** | Primarily POSIX / macOS tested | Windows 11 (`CREATE_NO_WINDOW`, `%LOCALAPPDATA%`) and Debian/Ubuntu (`systemd`) tested |
+| **Validation Suite** | Minimal test coverage | 23 unit/integration tests; passes `hermes plugins validate` with 0 warnings |
 
-1. **Hermes Agent** installed and running:
+---
+
+## Prerequisites
+
+1. **Hermes Agent** v0.21.4 or later:
    ```bash
    hermes --version
    ```
-2. **Google Antigravity CLI (`agy`)** installed:
+
+2. **Google Antigravity CLI (`agy`)**:
    - **Linux / macOS**:
      ```bash
-     curl -fsSL https://antigravity.google/cli/install.sh | bash
+     curl -fsSL https://antigravity.google/cli/install.sh -o install.sh
+     bash install.sh && rm install.sh
      ```
-   - **Windows**: Download the installer from [antigravity.google/download](https://antigravity.google/download).
-   - Verify installation:
-     ```bash
-     agy --version
-     ```
+   - **Windows**: Download the binary installer from [antigravity.google/download](https://antigravity.google/download).
+
+Verify that `agy` is present in your `PATH`:
+```bash
+agy --version
+```
 
 ---
 
-## 📦 Installation
+## Installation
 
-### Option A: Linux / Debian / Ubuntu (Headless Server, SSH, Proxmox LXC)
+### Linux / Debian / Ubuntu (Headless Server, Proxmox LXC, systemd)
 
-1. **Clone the plugin repository** into your Hermes plugins directory:
+1. Clone into the Hermes user plugins directory:
    ```bash
-   # Under the hermes user (e.g. su - hermes)
    mkdir -p ~/.hermes/plugins
    git clone https://github.com/clockwork-dev/hermes-antigravity-oauth.git ~/.hermes/plugins/antigravity-oauth
    ```
 
-2. **Validate the plugin**:
+2. Verify plugin manifest and security boundaries:
    ```bash
    hermes plugins validate ~/.hermes/plugins/antigravity-oauth
    ```
-   *(Expected output: `Validation passed.`)*
 
-3. **Authenticate your Google account**:
+3. Authenticate with Google Antigravity OAuth:
    ```bash
    hermes auth add antigravity-oauth
    ```
-   *Follow the on-screen URL in your browser and approve the login.*
+   Follow the authorization URL in a browser and paste the returned verification token into the terminal.
 
-4. **Restart Hermes background services** (if running):
+4. If running background services (e.g., Hermes Web Dashboard or Gateway), reload them to register the new provider:
    ```bash
-   # If running the web dashboard via systemd:
    systemctl --user restart hermes-dashboard.service
-
-   # Or if running the gateway service:
+   # or:
    hermes gateway restart
    ```
 
 ---
 
-### Option B: Windows (PowerShell)
+### Windows (PowerShell)
 
-1. **Clone or copy the plugin** to your local Hermes directory:
+1. Clone or copy to your user profile:
    ```powershell
-   $pluginsDir = "$env:USERPROFILE\.hermes\plugins"
-   New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
-   git clone https://github.com/clockwork-dev/hermes-antigravity-oauth.git "$pluginsDir\antigravity-oauth"
+   $dir = "$env:USERPROFILE\.hermes\plugins\antigravity-oauth"
+   git clone https://github.com/clockwork-dev/hermes-antigravity-oauth.git $dir
    ```
 
-2. **Validate the plugin**:
+2. Validate:
    ```powershell
    hermes plugins validate "$env:USERPROFILE\.hermes\plugins\antigravity-oauth"
    ```
 
-3. **Authenticate your Google account**:
+3. Authenticate:
    ```powershell
    hermes auth add antigravity-oauth
    ```
 
-4. **Restart Hermes background gateway** (if active):
+4. If running a background gateway daemon:
    ```powershell
    hermes gateway restart
    ```
 
 ---
 
-## 🎮 Usage
+## Usage
 
-### 1. Interactive Model Selection
+### Interactive Selection
 
-Launch Hermes's interactive model picker:
+Run the model switcher:
 ```bash
 hermes model
 ```
-1. Select **`Google Antigravity OAuth`** from the provider list.
-2. Select your desired model (e.g. `gemini-4-argon` or `gemini-3.8-flash`).
-3. Select your desired reasoning effort (`low`, `medium`, `high`).
+Select **Google Antigravity OAuth**, choose the base model, and configure reasoning effort.
 
-### 2. Single-Line Command Execution
+### Non-Interactive / CLI
 
-Run a quick query directly via CLI:
 ```bash
-hermes chat -q "Explain quantum computing in 3 sentences" --provider antigravity-oauth -m gemini-3.8-flash
+hermes chat -q "Summarize the commit history" --provider antigravity-oauth -m gemini-3.8-flash
 ```
 
-### 3. Check Authentication Status
+Specify reasoning effort:
+```bash
+hermes chat -q "Prove this theorem" --provider antigravity-oauth -m gemini-4-argon --reasoning-effort high
+```
 
-Check your current connection and binary detection:
+### Inspect Provider Status
+
 ```bash
 hermes auth status antigravity-oauth
 ```
 
 ---
 
-## 🤖 Supported Models Catalog
+## Model Catalog & Aliases
 
-| Model ID | Provider Family | Reasoning Effort | Description |
+The plugin dynamically queries `agy models` at runtime with a thread-safe 1-hour cache. The fallback catalog reflects active Google Antigravity tiers:
+
+| Model Identifier | Upstream Architecture | Supported Reasoning | Context Window |
 | :--- | :--- | :--- | :--- |
-| **`gemini-4-argon`** | Google Gemini 4 | `low`, `medium`, `high` | Flagship reasoning & deep thinking model |
-| **`gemini-3.8-flash`** *(Default)* | Google Gemini 3.8 | `low`, `medium`, `high` | Fast, low-latency, balanced daily model |
-| **`claude-sonnet-5-5`** | Anthropic Claude 5.5 | `low`, `medium`, `high` | Top-tier coding, architecture, and tool use |
-| **`claude-opus-5-5`** | Anthropic Claude 5.5 | `low`, `medium`, `high` | Heavy reasoning, complex research & mathematics |
-| **`gpt-oss-120b`** | GPT-OSS | `medium` | Open-weight foundation model |
+| `gemini-4-argon` | Google Gemini 4 | `low`, `medium`, `high` | 1,000,000 |
+| `gemini-3.8-flash` *(Default)* | Google Gemini 3.8 | `low`, `medium`, `high` | 1,000,000 |
+| `claude-sonnet-5-5` | Anthropic Claude 5.5 | `low`, `medium`, `high` | 200,000 |
+| `claude-opus-5-5` | Anthropic Claude 5.5 | `low`, `medium`, `high` | 200,000 |
+| `gpt-oss-120b` | Open-Weight Mixture of Experts | `medium` | 128,000 |
 
-### Automatic Aliases & Legacy Compatibility
-The plugin automatically routes common aliases and older model IDs to active equivalents:
-- `gemini-pro`, `gemini-3.1-pro` ➡️ `gemini-4-argon`
-- `gemini-flash` ➡️ `gemini-3.8-flash`
-- `claude-sonnet`, `claude-sonnet-4-6` ➡️ `claude-sonnet-5-5`
-- `claude-opus`, `claude-opus-4-6-thinking` ➡️ `claude-opus-5-5`
-- `gpt-oss` ➡️ `gpt-oss-120b`
+### Backward-Compatibility Aliases
 
----
-
-## 🛠️ Troubleshooting & FAQ
-
-<details>
-<summary><b>Q: I get "Unknown provider 'antigravity-oauth'" when chatting or in Dashboard</b></summary>
-<br>
-Hermes caches provider registrations in RAM when its daemon boots. If Hermes Gateway or Dashboard was already running before you installed the plugin, restart it:
-
-```bash
-# On Linux:
-systemctl --user restart hermes-dashboard.service
-# or:
-hermes gateway restart
-```
-</details>
-
-<details>
-<summary><b>Q: Git clone fails with "Permission denied (publickey)"</b></summary>
-<br>
-If the repository is private, your server needs read access. Either:
-1. Add a server SSH Deploy Key (`ssh-keygen -t ed25519` ➡️ GitHub Repo Settings ➡️ Deploy Keys).
-2. Or clone with a Personal Access Token:
-   ```bash
-   git clone https://<GITHUB_TOKEN>@github.com/clockwork-dev/hermes-antigravity-oauth.git ~/.hermes/plugins/antigravity-oauth
-   ```
-</details>
-
-<details>
-<summary><b>Q: `agy: command not found` during auth or chat</b></summary>
-<br>
-Ensure the Antigravity CLI binary is located in your system `PATH` (typically `~/.local/bin/agy` or `C:\Users\<user>\AppData\Local\agy\bin\agy.exe`).
-You can also set an explicit environment variable:
-```bash
-export ANTIGRAVITY_BINARY=/path/to/agy
-```
-</details>
+Requests referencing legacy or shorthand names are resolved transparently:
+- `gemini-pro`, `gemini-3.1-pro` ➔ `gemini-4-argon`
+- `gemini-flash` ➔ `gemini-3.8-flash`
+- `claude-sonnet`, `claude-sonnet-4-6` ➔ `claude-sonnet-5-5`
+- `claude-opus`, `claude-opus-4-6-thinking` ➔ `claude-opus-5-5`
+- `gpt-oss` ➔ `gpt-oss-120b`
 
 ---
 
-## 🧪 Running Unit & Integration Tests
+## Troubleshooting
 
-The plugin includes a full test suite with 23 hermetic tests:
+### `AuthError: Unknown provider 'antigravity-oauth'`
+Occurs when a persistent daemon (`hermes gateway` or `hermes-dashboard.service`) was started prior to plugin installation. The daemon caches provider registries at boot time.
+- **Fix**: Restart the daemon:
+  ```bash
+  systemctl --user restart hermes-dashboard.service
+  # or:
+  hermes gateway restart
+  ```
 
-```bash
-# Run tests with pytest
-pytest tests/ -v
-```
+### `git@github.com: Permission denied (publickey)`
+Private repository access requires SSH keys or a personal access token on headless servers.
+- **Fix (Deploy Key)**: Run `ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519`, print `cat ~/.ssh/id_ed25519.pub`, and register it in GitHub repository **Settings ➔ Deploy Keys**.
+- **Fix (HTTPS Token)**: Clone using a scoped Personal Access Token:
+  ```bash
+  git clone https://<GITHUB_TOKEN>@github.com/clockwork-dev/hermes-antigravity-oauth.git ~/.hermes/plugins/antigravity-oauth
+  ```
 
-All tests run in isolated temporary environments and mock OS processes cleanly.
+### `agy: command not found`
+The executable is missing from standard `PATH` directories.
+- **Fix**: Ensure `~/.local/bin` (Linux) or `%LOCALAPPDATA%\agy\bin` (Windows) is exported in shell initialization files (`~/.bashrc`, `~/.profile`), or define the binary explicitly:
+  ```bash
+  export ANTIGRAVITY_BINARY=/usr/local/bin/agy
+  ```
 
 ---
 
-## 📄 License
+## Verification & Testing
 
-This project is licensed under the [MIT License](LICENSE).
-Derived and enhanced from the original `antigravity-subscription-directsdk` community project.
+The test suite covers process lifecycle, stream framing, signal handling, token rotation, and error classification:
+
+```bash
+python -m pytest tests/ -v
+```
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.
