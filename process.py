@@ -162,22 +162,66 @@ _KEYRING_PROBE_TIMEOUT_SECONDS = 3.0
 _KEYRING_BYPASS_SSH_MARKER = "127.0.0.1 0 127.0.0.1 22"
 
 
+def _is_path_home_mocked() -> bool:
+    """Return True when `pathlib.Path.home` has been patched by unit tests."""
+    home_mod = getattr(Path.home, "__module__", "") or ""
+    return not home_mod.startswith("pathlib")
+
+
+def _posix_account_homes() -> list[Path]:
+    """Return unique candidate home directories for the current user on POSIX/Windows."""
+    homes: list[Path] = []
+    try:
+        homes.append(Path.home())
+    except (OSError, RuntimeError):
+        pass
+    if os.name == "posix" and not _is_path_home_mocked():
+        try:
+            import pwd
+
+            pw_dir = pwd.getpwuid(os.getuid()).pw_dir
+            if pw_dir:
+                p = Path(pw_dir)
+                if p not in homes:
+                    homes.append(p)
+        except Exception:
+            pass
+    return homes
+
+
 def resolve_hermes_antigravity_home(home_dir: Path | None = None) -> Path:
     """Return the persistent Hermes-owned isolated HOME directory for Antigravity OAuth.
 
     Storing Hermes's OAuth token here (instead of the global OS keyring or `~/.gemini`)
     allows Hermes Agent to use a dedicated Google account without switching or
     overwriting the user's primary `agy` CLI / Antigravity IDE account.
+
+    Resolution order:
+    1. `ANTIGRAVITY_HERMES_HOME` environment override (if set)
+    2. `HERMES_HOME` environment variable (used by Linux `systemd` units and custom profiles),
+       when `home_dir` is not explicitly passed and `Path.home` is not mocked by unit tests
+    3. `<home_dir>/AppData/Local/hermes/antigravity-oauth` (Windows) or
+       `<home_dir>/<HERMES_DATA_DIR_SUFFIX or .hermes>/antigravity-oauth` (Linux / macOS)
     """
     explicit = os.environ.get("ANTIGRAVITY_HERMES_HOME", "").strip()
     if explicit:
         return Path(explicit).expanduser()
 
+    if home_dir is None and not _is_path_home_mocked():
+        hermes_home_env = os.environ.get("HERMES_HOME", "").strip()
+        if hermes_home_env:
+            candidate = Path(hermes_home_env).expanduser()
+            # Ignore only the hermetic pytest bootstrap directory from conftest.py
+            if not candidate.name.startswith("hermes_agy_oauth_test_home_"):
+                return candidate / "antigravity-oauth"
+
     root = home_dir if home_dir is not None else Path.home()
     win_hermes = root / "AppData" / "Local" / "hermes"
     if win_hermes.is_dir():
         return win_hermes / "antigravity-oauth"
-    return root / ".hermes" / "antigravity-oauth"
+
+    suffix = os.environ.get("HERMES_DATA_DIR_SUFFIX", "").strip() or ".hermes"
+    return root / suffix / "antigravity-oauth"
 
 
 def _resolve_oauth_token_candidates(home_dir: Path | None = None) -> list[Path]:
@@ -412,35 +456,51 @@ def _is_usable_binary(path: str | Path) -> bool:
 
 def resolve_antigravity_binary() -> str:
     """Locate the `agy` CLI executable across environment overrides, PATH, and standard locations."""
-    env_override = os.environ.get("ANTIGRAVITY_BINARY", "").strip()
-    if env_override and _is_usable_binary(env_override):
-        return env_override
+    for env_key in ("ANTIGRAVITY_BINARY", "AGY_CLI_PATH"):
+        env_override = os.environ.get(env_key, "").strip()
+        if env_override and _is_usable_binary(env_override):
+            return env_override
 
     which_agy = shutil.which("agy")
     if which_agy and _is_usable_binary(which_agy):
         return which_agy
 
-    home = Path.home()
-    candidates: list[Path] = [
-        home / ".antigravity" / "bin" / "agy",
-        home / ".local" / "bin" / "agy",
-        Path("/opt/homebrew/bin/agy"),
+    homes = _posix_account_homes()
+    candidates: list[Path] = []
+    for h in homes:
+        candidates.extend([
+            h / ".local" / "bin" / "agy",
+            h / ".antigravity" / "bin" / "agy",
+        ])
+
+    candidates.extend([
         Path("/usr/local/bin/agy"),
         Path("/usr/bin/agy"),
-    ]
+        Path("/usr/share/antigravity/bin/agy"),
+        Path("/opt/antigravity/bin/agy"),
+        Path("/opt/Antigravity/bin/agy"),
+        Path("/opt/homebrew/bin/agy"),
+    ])
+
     if sys.platform == "win32":
         local_app_data = os.environ.get("LOCALAPPDATA", "")
         if local_app_data:
             base = Path(local_app_data)
             candidates.extend([
+                base / "agy" / "bin" / "agy.exe",
+                base / "agy" / "bin" / "agy.cmd",
                 base / "Programs" / "Antigravity" / "bin" / "agy.cmd",
                 base / "Programs" / "Antigravity" / "bin" / "agy.exe",
                 base / "Programs" / "Antigravity" / "agy.exe",
             ])
-        candidates.extend([
-            home / ".antigravity" / "bin" / "agy.cmd",
-            home / ".antigravity" / "bin" / "agy.exe",
-        ])
+        for h in homes:
+            candidates.extend([
+                h / "AppData" / "Local" / "agy" / "bin" / "agy.exe",
+                h / "AppData" / "Local" / "agy" / "bin" / "agy.cmd",
+                h / "AppData" / "Local" / "Programs" / "Antigravity" / "bin" / "agy.exe",
+                h / ".antigravity" / "bin" / "agy.cmd",
+                h / ".antigravity" / "bin" / "agy.exe",
+            ])
 
     for candidate in candidates:
         if _is_usable_binary(candidate):
@@ -577,6 +637,55 @@ def setup_isolated_home(cwd: str | Path) -> tuple[Path, Path]:
     return isolated_home, gemini_dir
 
 
+def sync_updated_isolated_tokens(gemini_dir: Path | None, home_dir: Path | None = None) -> None:
+    """Persist refreshed OAuth tokens written inside an isolated workspace back to the source token file.
+
+    When `agy` refreshes an expired OAuth `access_token`, Go's file token storage may replace
+    a symlink with a regular file (via atomic rename) or update a copied token file (when
+    hardlinks/symlinks across filesystems or Windows without Developer Mode fell back to `copy2`).
+    Syncing newer non-empty token files back to `_find_existing_oauth_token` ensures refreshed
+    tokens survive across worker restarts and temporary directory cleanups.
+    """
+    if gemini_dir is None:
+        return
+    source_token = _find_existing_oauth_token(home_dir)
+    if source_token is None:
+        return
+    try:
+        source_mtime = source_token.stat().st_mtime
+    except OSError:
+        return
+
+    gemini_root = gemini_dir.parent
+    isolated_candidates = (
+        *(gemini_dir / name for name in _OAUTH_TOKEN_FILENAMES),
+        gemini_root / "jetski-standalone-oauth-token",
+    )
+    newest_candidate: Path | None = None
+    newest_mtime = source_mtime
+    for candidate in isolated_candidates:
+        try:
+            if os.path.islink(candidate):
+                continue
+            if not candidate.is_file():
+                continue
+            if _same_underlying_file(candidate, source_token):
+                continue
+            st = candidate.stat()
+            if st.st_size > 0 and st.st_mtime > newest_mtime:
+                newest_mtime = st.st_mtime
+                newest_candidate = candidate
+        except OSError:
+            continue
+
+    if newest_candidate is not None:
+        try:
+            shutil.copy2(newest_candidate, source_token)
+            os.chmod(source_token, 0o600)
+        except OSError as exc:
+            logger.debug("Could not sync refreshed OAuth token back to %s: %s", source_token, exc)
+
+
 def _isolated_home_has_token_file(isolated_home: Path) -> bool:
     """Return True if `isolated_home` contains an OAuth token file in `.gemini`."""
     gemini_root = isolated_home / ".gemini"
@@ -671,6 +780,17 @@ def build_clean_child_env(isolated_home: Path, *, force_file_auth: bool = False)
     clean_env["HOME"] = str(isolated_home)
     clean_env["USERPROFILE"] = str(isolated_home)
     clean_env["XDG_CONFIG_HOME"] = str(isolated_home / ".config")
+
+    # On Linux/POSIX (especially under systemd with a minimal PATH), ensure standard binary dirs exist in PATH
+    if sys.platform != "win32":
+        raw_path = clean_env.get("PATH", "")
+        path_parts = [p for p in raw_path.split(os.pathsep) if p] if raw_path else []
+        fallback_dirs = [str(h / ".local" / "bin") for h in _posix_account_homes()]
+        fallback_dirs.extend(["/usr/local/bin", "/usr/bin", "/bin"])
+        for fallback_dir in fallback_dirs:
+            if fallback_dir not in path_parts:
+                path_parts.append(fallback_dir)
+        clean_env["PATH"] = os.pathsep.join(path_parts)
 
     # When a file-based OAuth token is present in `isolated_home` (or during `hermes auth add`),
     # set SSH_CONNECTION so `agy`'s CompositeTokenStorage uses file-based token storage inside

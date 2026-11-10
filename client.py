@@ -9,6 +9,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -36,6 +37,7 @@ try:
         popen_isolated_session,
         resolve_antigravity_binary,
         setup_isolated_home,
+        sync_updated_isolated_tokens,
         terminate_process_group,
     )
     from .prompt import build_prompt_from_messages, format_delta_messages
@@ -58,6 +60,7 @@ except ImportError:
         popen_isolated_session,
         resolve_antigravity_binary,
         setup_isolated_home,
+        sync_updated_isolated_tokens,
         terminate_process_group,
     )
     from prompt import build_prompt_from_messages, format_delta_messages  # type: ignore[no-redef]
@@ -91,7 +94,7 @@ def _force_rmtree(root_path: str | Path) -> None:
     if not os.path.exists(path_str) and not os.path.islink(path_str):
         return
 
-    def _on_rm_error(func: Any, failed_path: str, exc_info: Any) -> None:
+    def _on_rm_error(func: Any, failed_path: str, exc_Or_info: Any) -> None:
         _chmod_writable_if_owned_unlinked(failed_path)
         try:
             func(failed_path)
@@ -100,7 +103,10 @@ def _force_rmtree(root_path: str | Path) -> None:
 
     for attempt in range(len(_RMTREE_RETRY_DELAYS) + 1):
         try:
-            shutil.rmtree(path_str, ignore_errors=False, onerror=_on_rm_error)
+            if sys.version_info >= (3, 12):
+                shutil.rmtree(path_str, ignore_errors=False, onexc=_on_rm_error)
+            else:
+                shutil.rmtree(path_str, ignore_errors=False, onerror=_on_rm_error)
         except OSError:
             pass
 
@@ -378,6 +384,7 @@ class AntigravityClient:
         self._cancel_idle_timer()
         with self._state_lock:
             proc = self._worker_proc
+            g_dir = self._worker_gemini_dir
             self._worker_proc = None
             self._worker_stderr = None
             self._worker_model = None
@@ -385,6 +392,8 @@ class AntigravityClient:
             self._worker_usage = {}
         if proc is not None:
             terminate_process_group(proc)
+        if g_dir is not None:
+            sync_updated_isolated_tokens(g_dir)
 
     def _ensure_worker(self, model: str, effort: str | None) -> tuple[subprocess.Popen[str], StderrDrainer, Path]:
         """Return an alive persistent worker for `(model, effort)`, spawning a fresh one if needed."""
@@ -478,6 +487,9 @@ class AntigravityClient:
     def _unregister_stream(self, stream: AntigravityStream) -> None:
         with self._streams_lock:
             self._active_streams.discard(stream)
+        g_dir = getattr(stream, "_gemini_dir", None)
+        if g_dir is not None:
+            sync_updated_isolated_tokens(g_dir)
 
     def _update_worker_usage(self, cumulative: dict[str, int]) -> None:
         with self._state_lock:

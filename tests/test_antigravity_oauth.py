@@ -697,5 +697,87 @@ class PromptPruningAndDiagnosticsTests(unittest.TestCase):
         self.assertEqual(len(report.warnings), 0)
 
 
+class CrossPlatformLinuxAndWindowsTests(unittest.TestCase):
+    def test_resolve_hermes_antigravity_home_across_linux_systemd_and_windows(self) -> None:
+        # 1. Explicit HERMES_HOME on Linux (systemd unit environment)
+        with (
+            patch.object(process_mod, "_is_path_home_mocked", return_value=False),
+            patch.dict(
+                os.environ,
+                {
+                    "ANTIGRAVITY_HERMES_HOME": "",
+                    "HERMES_HOME": "/home/debian/.hermes-prod",
+                },
+                clear=False,
+            ),
+        ):
+            resolved = process_mod.resolve_hermes_antigravity_home()
+            self.assertEqual(resolved, Path("/home/debian/.hermes-prod/antigravity-oauth"))
+
+        # 2. Windows AppData\Local\hermes discovery when directory exists
+        with tempfile.TemporaryDirectory() as fake_win_home:
+            win_hermes = Path(fake_win_home) / "AppData" / "Local" / "hermes"
+            win_hermes.mkdir(parents=True)
+            with patch.dict(os.environ, {"ANTIGRAVITY_HERMES_HOME": ""}, clear=False):
+                resolved_win = process_mod.resolve_hermes_antigravity_home(Path(fake_win_home))
+                self.assertEqual(resolved_win, win_hermes / "antigravity-oauth")
+
+    def test_resolve_antigravity_binary_on_debian_and_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as fake_home:
+            local_bin_agy = Path(fake_home) / ".local" / "bin" / "agy"
+            local_bin_agy.parent.mkdir(parents=True)
+            local_bin_agy.write_text("#!/bin/sh\n", encoding="utf-8")
+
+            with (
+                patch.object(process_mod.sys, "platform", "linux"),
+                patch("shutil.which", return_value=None),
+                patch.object(process_mod, "_posix_account_homes", return_value=[Path(fake_home)]),
+                patch.dict(os.environ, {"ANTIGRAVITY_BINARY": "", "AGY_CLI_PATH": ""}, clear=False),
+            ):
+                self.assertEqual(resolve_antigravity_binary(), str(local_bin_agy))
+
+            # AGY_CLI_PATH override
+            custom_agy = Path(fake_home) / "custom-agy"
+            custom_agy.write_text("#!/bin/sh\n", encoding="utf-8")
+            with patch.dict(os.environ, {"ANTIGRAVITY_BINARY": "", "AGY_CLI_PATH": str(custom_agy)}, clear=False):
+                self.assertEqual(resolve_antigravity_binary(), str(custom_agy))
+
+    def test_linux_child_env_includes_fallback_posix_path(self) -> None:
+        isolated = Path("/tmp/fake_iso_linux")
+        with (
+            patch.object(process_mod.sys, "platform", "linux"),
+            patch.dict(os.environ, {"PATH": "/custom/bin"}, clear=True),
+        ):
+            env = build_clean_child_env(isolated)
+            path_entries = env["PATH"].split(os.pathsep)
+            self.assertIn("/custom/bin", path_entries)
+            self.assertIn("/usr/local/bin", path_entries)
+            self.assertIn("/usr/bin", path_entries)
+            self.assertIn("/bin", path_entries)
+
+    def test_sync_updated_isolated_tokens_persists_refreshed_oauth_token(self) -> None:
+        with tempfile.TemporaryDirectory() as fake_home, tempfile.TemporaryDirectory() as ws:
+            hermes_gemini = Path(fake_home) / ".hermes" / "antigravity-oauth" / ".gemini" / "antigravity-cli"
+            hermes_gemini.mkdir(parents=True)
+            source_token = hermes_gemini / "antigravity-oauth-token"
+            source_token.write_text('{"access_token":"old_expired_token"}', encoding="utf-8")
+            old_time = 1_700_000_000.0
+            os.utime(source_token, (old_time, old_time))
+
+            iso_gemini = Path(ws) / "home" / ".gemini" / "antigravity-cli"
+            iso_gemini.mkdir(parents=True)
+            refreshed_token = iso_gemini / "antigravity-oauth-token"
+            refreshed_token.write_text('{"access_token":"new_refreshed_token"}', encoding="utf-8")
+            new_time = old_time + 3600.0
+            os.utime(refreshed_token, (new_time, new_time))
+
+            with patch.dict(os.environ, {"ANTIGRAVITY_CONFIG_DIR": "", "ANTIGRAVITY_HERMES_HOME": ""}, clear=False):
+                process_mod.sync_updated_isolated_tokens(iso_gemini, home_dir=Path(fake_home))
+                self.assertEqual(
+                    source_token.read_text(encoding="utf-8"),
+                    '{"access_token":"new_refreshed_token"}',
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

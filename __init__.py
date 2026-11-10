@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 from typing import Any
 
-from agent.runtime_cwd import resolve_agent_cwd
 from hermes_cli.auth_constants import AuthError
 from providers import register_provider
 from providers.base import ProviderProfile
@@ -34,6 +32,7 @@ try:
         resolve_hermes_antigravity_home,
         run_isolated_antigravity_login,
         setup_isolated_home,
+        sync_updated_isolated_tokens,
     )
     from .usage import fetch_antigravity_usage, invalidate_usage_cache
 except ImportError:
@@ -59,6 +58,7 @@ except ImportError:
         resolve_hermes_antigravity_home,
         run_isolated_antigravity_login,
         setup_isolated_home,
+        sync_updated_isolated_tokens,
     )
     from usage import fetch_antigravity_usage, invalidate_usage_cache  # type: ignore[no-redef]
 
@@ -235,8 +235,6 @@ class AntigravityOAuthProfile(ProviderProfile):
             return True
 
         raise ValueError(f"Unsupported auth action for {self.name}: {action!r}")
-
-    auth_handler = _handle_auth
 
     def discover_models(
         self,
@@ -440,8 +438,6 @@ class AntigravityOAuthProfile(ProviderProfile):
 
         return None
 
-    classify_api_error = _classify_error
-
     def fetch_account_usage(
         self,
         *,
@@ -506,4 +502,5 @@ __all__ = [
     "resolve_model_family_alias",
     "run_isolated_antigravity_login",
     "setup_isolated_home",
+    "sync_updated_isolated_tokens",
 ]
