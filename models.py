@@ -40,7 +40,7 @@ _FALLBACK_FAMILIES: dict[str, tuple[str, ...]] = {
     "claude-opus-5-5": (),
 }
 
-DEFAULT_MODEL = "gemini-3.8-flash-high"
+DEFAULT_MODEL = "gemini-3.8-flash"
 
 MODEL_ALIASES: dict[str, str] = {
     # Convenience short names
@@ -71,16 +71,13 @@ _CROSS_VERSION_FALLBACKS: dict[str, str] = {
 
 
 def _build_models_from_families(families: dict[str, tuple[str, ...]]) -> list[str]:
-    """Expand a `{family: (efforts...)}` mapping into concrete model IDs."""
+    """Return clean base model IDs from families without duplicating reasoning effort variants."""
     models: list[str] = []
     for base, efforts in families.items():
         if base in ("claude-sonnet-5-5", "claude-opus-5-5") and not efforts:
             # Skip empty placeholder aliases in the static fallback list
             continue
         models.append(base)
-        if len(efforts) > 1:
-            for eff in efforts:
-                models.append(f"{base}-{eff}")
     return models
 
 
@@ -205,7 +202,7 @@ def get_available_models(binary: str = "") -> list[str]:
 
 
 def get_annotated_models(binary: str = "") -> list[dict[str, Any]]:
-    """Return annotated model rows (`id`, `label`, `note`) for `ProviderProfile.discover_models()`."""
+    """Return clean annotated model rows for `ProviderProfile.discover_models()`."""
     _, families = get_model_catalog(binary)
     rows: list[dict[str, Any]] = []
     for base, efforts in families.items():
@@ -216,21 +213,13 @@ def get_annotated_models(binary: str = "") -> list[dict[str, Any]]:
             rows.append({
                 "id": base,
                 "label": base,
-                "note": f"supports reasoning_effort: {eff_str}",
+                "note": f"reasoning: {eff_str}",
             })
-            if len(efforts) > 1:
-                for eff in efforts:
-                    variant = f"{base}-{eff}"
-                    rows.append({
-                        "id": variant,
-                        "label": variant,
-                        "note": f"pinned {eff} reasoning effort",
-                    })
         else:
             rows.append({
                 "id": base,
                 "label": base,
-                "note": "built-in adaptive thinking",
+                "note": "adaptive thinking",
             })
     return rows
 
