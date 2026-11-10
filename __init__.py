@@ -12,6 +12,7 @@ from providers.base import ProviderProfile
 try:
     from .client import AntigravityClient
     from .models import (
+        _FALLBACK_MODELS,
         DEFAULT_MODEL,
         EFFORT_LEVELS,
         MODEL_ALIASES,
@@ -38,6 +39,7 @@ try:
 except ImportError:
     from client import AntigravityClient  # type: ignore[no-redef]
     from models import (  # type: ignore[no-redef]
+        _FALLBACK_MODELS,
         DEFAULT_MODEL,
         EFFORT_LEVELS,
         MODEL_ALIASES,
@@ -464,6 +466,8 @@ antigravity_oauth_profile = AntigravityOAuthProfile(
     process_command_env_vars=("ANTIGRAVITY_BINARY", "AGY_CLI_PATH"),
     default_aux_model="gemini-3.8-flash",
     model_aliases=dict(MODEL_ALIASES),
+    fallback_models=tuple(_FALLBACK_MODELS),
+    static_models=tuple(_FALLBACK_MODELS),
     supports_streaming=True,
     supports_vision=True,
     supports_health_check=False,

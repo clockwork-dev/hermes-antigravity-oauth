@@ -324,7 +324,7 @@ class ModelResolutionAndCatalogTests(unittest.TestCase):
         invalidate_model_catalog_cache()
 
     def test_dynamic_catalog_and_cross_version_alias_resolution(self) -> None:
-        # Case A: agy 1.1 / fallback catalog where claude-sonnet-4-6 is effortless and 5-5 is aliased to 4-6
+        # Case A: fallback catalog with modern families (gemini-4-argon, gemini-3.8-flash, claude-sonnet-5-5, ...)
         fallback_fams = dict(models_mod._FALLBACK_FAMILIES)
         with patch.object(models_mod, "get_model_catalog", return_value=(models_mod._FALLBACK_MODELS, fallback_fams)):
             with tempfile.TemporaryDirectory() as tmp:
@@ -334,16 +334,20 @@ class ModelResolutionAndCatalogTests(unittest.TestCase):
                     ("gemini-3.8-flash-low", None),
                 )
                 self.assertEqual(
-                    client._resolve_model_and_effort("gemini-3.1-pro", "medium"),
-                    ("gemini-3.1-pro-high", None),
-                )
-                self.assertEqual(
-                    client._resolve_model_and_effort("claude-sonnet-4-6", "low"),
-                    ("claude-sonnet-4-6", None),
+                    client._resolve_model_and_effort("gemini-4-argon", "medium"),
+                    ("gemini-4-argon-medium", None),
                 )
                 self.assertEqual(
                     client._resolve_model_and_effort("claude-sonnet-5-5", "low"),
-                    ("claude-sonnet-4-6", None),
+                    ("claude-sonnet-5-5-low", None),
+                )
+                self.assertEqual(
+                    client._resolve_model_and_effort("claude-sonnet-4-6", "low"),
+                    ("claude-sonnet-5-5-low", None),
+                )
+                self.assertEqual(
+                    client._resolve_model_and_effort("gemini-3.1-pro", "medium"),
+                    ("gemini-4-argon-medium", None),
                 )
                 client.close()
 

@@ -31,13 +31,9 @@ EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high")
 _FALLBACK_FAMILIES: dict[str, tuple[str, ...]] = {
     "gemini-4-argon": ("low", "medium", "high"),
     "gemini-3.8-flash": ("low", "medium", "high"),
-    "gemini-3.1-pro": ("low", "high"),
-    "claude-sonnet-4-6": (),
-    "claude-opus-4-6-thinking": (),
+    "claude-opus-5-5": ("low", "medium", "high"),
+    "claude-sonnet-5-5": ("low", "medium", "high"),
     "gpt-oss-120b": ("medium",),
-    # Legacy / cross-version entries recognized by parse_model_and_effort
-    "claude-sonnet-5-5": (),
-    "claude-opus-5-5": (),
 }
 
 DEFAULT_MODEL = "gemini-3.8-flash"
@@ -46,24 +42,26 @@ MODEL_ALIASES: dict[str, str] = {
     # Convenience short names
     "gemini-argon": "gemini-4-argon",
     "gemini-flash": "gemini-3.8-flash",
-    "gemini-pro": "gemini-3.1-pro",
-    "claude-sonnet": "claude-sonnet-4-6",
-    "claude-opus": "claude-opus-4-6-thinking",
-    "claude-opus-4-6": "claude-opus-4-6-thinking",
+    "gemini-pro": "gemini-4-argon",
+    "claude-sonnet": "claude-sonnet-5-5",
+    "claude-opus": "claude-opus-5-5",
     "gpt-oss": "gpt-oss-120b",
-    # Legacy / cross-version aliases
-    "claude-sonnet-4-5": "claude-sonnet-4-6",
-    "claude-sonnet-4-5-thinking": "claude-sonnet-4-6",
-    "claude-opus-4-5": "claude-opus-4-6-thinking",
-    "claude-opus-4-5-thinking": "claude-opus-4-6-thinking",
-    "claude-sonnet-5-5": "claude-sonnet-4-6",
-    "claude-sonnet-5-5-thinking": "claude-sonnet-4-6",
-    "claude-opus-5-5": "claude-opus-4-6-thinking",
-    "claude-opus-5-5-thinking": "claude-opus-4-6-thinking",
+    # Legacy model aliases (automatically redirect to active models)
+    "gemini-3.1-pro": "gemini-4-argon",
+    "claude-sonnet-4-6": "claude-sonnet-5-5",
+    "claude-sonnet-4-5": "claude-sonnet-5-5",
+    "claude-sonnet-4-5-thinking": "claude-sonnet-5-5",
+    "claude-opus-4-6": "claude-opus-5-5",
+    "claude-opus-4-6-thinking": "claude-opus-5-5",
+    "claude-opus-4-5": "claude-opus-5-5",
+    "claude-opus-4-5-thinking": "claude-opus-5-5",
+    "claude-sonnet-5-5-thinking": "claude-sonnet-5-5",
+    "claude-opus-5-5-thinking": "claude-opus-5-5",
 }
 
-# Bidirectional cross-version fallback when `agy` 1.2+ serves 5-5 instead of 4-6.
+# Bidirectional cross-version fallback when legacy model names are requested.
 _CROSS_VERSION_FALLBACKS: dict[str, str] = {
+    "gemini-3.1-pro": "gemini-4-argon",
     "claude-sonnet-4-6": "claude-sonnet-5-5",
     "claude-opus-4-6-thinking": "claude-opus-5-5",
     "claude-opus-4-6": "claude-opus-5-5",
@@ -72,13 +70,7 @@ _CROSS_VERSION_FALLBACKS: dict[str, str] = {
 
 def _build_models_from_families(families: dict[str, tuple[str, ...]]) -> list[str]:
     """Return clean base model IDs from families without duplicating reasoning effort variants."""
-    models: list[str] = []
-    for base, efforts in families.items():
-        if base in ("claude-sonnet-5-5", "claude-opus-5-5") and not efforts:
-            # Skip empty placeholder aliases in the static fallback list
-            continue
-        models.append(base)
-    return models
+    return list(families.keys())
 
 
 _FALLBACK_MODELS: list[str] = _build_models_from_families(_FALLBACK_FAMILIES)
@@ -206,8 +198,6 @@ def get_annotated_models(binary: str = "") -> list[dict[str, Any]]:
     _, families = get_model_catalog(binary)
     rows: list[dict[str, Any]] = []
     for base, efforts in families.items():
-        if base in ("claude-sonnet-5-5", "claude-opus-5-5") and not efforts:
-            continue
         if efforts:
             eff_str = ", ".join(efforts)
             rows.append({
