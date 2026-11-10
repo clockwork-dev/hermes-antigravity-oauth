@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>hermes-antigravity-oauth · Hermes Agent Provider Plugin</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.05); }
+    }
+    @keyframes flow-line {
+      0% { stroke-dashoffset: 40; }
+      100% { stroke-dashoffset: 0; }
+    }
+    .animate-flow {
+      stroke-dasharray: 8 6;
+      animation: flow-line 1.2s linear infinite;
+    }
+    .glow-effect {
+      box-shadow: 0 0 35px -5px rgba(59, 130, 246, 0.25);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.2);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen selection:bg-blue-600 selection:text-white">
+
+  <!-- Header / Navigation -->
+  <header class="sticky top-0 z-50 backdrop-blur-md bg-slate-950/80 border-b border-slate-800/80">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-blue-500/20 text-lg">
+          Ω
+        </div>
+        <div>
+          <span class="font-bold text-base tracking-tight text-white">hermes-antigravity-oauth</span>
+          <span class="text-xs px-2 py-0.5 ml-2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">v1.1.0</span>
+        </div>
+      </div>
+      <nav class="hidden md:flex items-center gap-6 text-sm text-slate-400">
+        <a href="#pipeline" class="hover:text-white transition-colors">Architecture Flow</a>
+        <a href="#models" class="hover:text-white transition-colors">Models</a>
+        <a href="#install" class="hover:text-white transition-colors">Installation</a>
+        <a href="#security" class="hover:text-white transition-colors">Security</a>
+      </nav>
+      <div class="flex items-center gap-3">
+        <a href="https://github.com/clockwork-dev/hermes-antigravity-oauth" target="_blank" class="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-200 text-sm border border-slate-700/80 transition-all font-medium">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="relative pt-20 pb-16 overflow-hidden">
+    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 -z-10"></div>
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-slate-700/60 text-xs text-slate-300 mb-8 backdrop-blur shadow-inner">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+        <span>Google Antigravity OAuth ➔ Hermes Agent Engine</span>
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight text-white mb-6 leading-tight">
+        Run <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-indigo-300 to-purple-400">Gemini 4 Argon & Claude 5.5</span><br>Directly in Hermes Agent
+      </h1>
+
+      <p class="max-w-2xl mx-auto text-base sm:text-lg text-slate-300 mb-10 leading-relaxed font-normal">
+        A zero-exfiltration, warm-worker OAuth plugin. Routes your Google Antigravity subscription into Nous Research Hermes Agent via the official <code class="text-blue-300 bg-slate-900 px-1.5 py-0.5 rounded font-mono text-sm">agy</code> CLI with persistent <code class="text-indigo-300 bg-slate-900 px-1.5 py-0.5 rounded font-mono text-sm">stream-json</code> pipes.
+      </p>
+
+      <!-- Quick Install Box -->
+      <div class="max-w-2xl mx-auto bg-slate-900/90 border border-slate-800 rounded-xl p-3 shadow-2xl flex items-center justify-between gap-3 text-left glow-effect mb-10">
+        <div class="flex items-center gap-3 overflow-x-auto custom-scrollbar py-1 px-2 font-mono text-sm text-slate-300 select-all">
+          <span class="text-blue-500 font-bold">$</span>
+          <span>hermes plugins install clockwork-dev/hermes-antigravity-oauth --enable</span>
+        </div>
+        <button id="copyBtn" onclick="copyInstallCmd()" class="flex-shrink-0 px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all shadow flex items-center gap-1.5">
+          <svg id="copyIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          <span id="copyText">Copy</span>
+        </button>
+      </div>
+
+      <!-- Feature Pill Badges -->
+      <div class="flex flex-wrap items-center justify-center gap-2.5 text-xs text-slate-300 font-mono">
+        <span class="px-3 py-1 rounded-md bg-slate-900 border border-slate-800">Warm stream-json Pool</span>
+        <span class="px-3 py-1 rounded-md bg-slate-900 border border-slate-800">Reasoning: Low · Med · High</span>
+        <span class="px-3 py-1 rounded-md bg-slate-900 border border-slate-800">Zero Secret Exfiltration</span>
+        <span class="px-3 py-1 rounded-md bg-slate-900 border border-slate-800">Debian 13 · Win 11 · macOS</span>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Interactive Graphic: Process Pipeline Flow -->
+  <section id="pipeline" class="py-16 border-t border-slate-900 bg-slate-950/60">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-14">
+        <h2 class="text-xs uppercase tracking-widest font-mono text-blue-400 font-semibold mb-2">Architectural Workflow</h2>
+        <p class="text-3xl font-bold text-white tracking-tight">How the Plugin Executes Each Turn</p>
+        <p class="text-slate-400 text-sm mt-3">Click on any pipeline step below to inspect how IPC streaming, token isolation, and tool safety happen under the hood.</p>
+      </div>
+
+      <!-- Pipeline Step Buttons -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-8" id="stepSelector">
+        <button onclick="selectStep(1)" id="stepBtn-1" class="step-btn active p-3 rounded-xl border text-left transition-all bg-blue-600/10 border-blue-500 text-blue-300 shadow">
+          <div class="text-[11px] font-mono opacity-80">STEP 1</div>
+          <div class="font-semibold text-sm text-white mt-1">User Prompt</div>
+          <div class="text-xs text-slate-400 mt-0.5">Hermes Turn Start</div>
+        </button>
+
+        <button onclick="selectStep(2)" id="stepBtn-2" class="step-btn p-3 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200">
+          <div class="text-[11px] font-mono opacity-80">STEP 2</div>
+          <div class="font-semibold text-sm text-white mt-1">Token Custody</div>
+          <div class="text-xs text-slate-400 mt-0.5">Zero-Exfiltration</div>
+        </button>
+
+        <button onclick="selectStep(3)" id="stepBtn-3" class="step-btn p-3 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200">
+          <div class="text-[11px] font-mono opacity-80">STEP 3</div>
+          <div class="font-semibold text-sm text-white mt-1">Warm Worker</div>
+          <div class="text-xs text-slate-400 mt-0.5">stream-json IPC</div>
+        </button>
+
+        <button onclick="selectStep(4)" id="stepBtn-4" class="step-btn p-3 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200">
+          <div class="text-[11px] font-mono opacity-80">STEP 4</div>
+          <div class="font-semibold text-sm text-white mt-1">Tool Guard</div>
+          <div class="text-xs text-slate-400 mt-0.5">Native Interception</div>
+        </button>
+
+        <button onclick="selectStep(5)" id="stepBtn-5" class="step-btn p-3 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200">
+          <div class="text-[11px] font-mono opacity-80">STEP 5</div>
+          <div class="font-semibold text-sm text-white mt-1">Delivery</div>
+          <div class="text-xs text-slate-400 mt-0.5">Stream Response</div>
+        </button>
+      </div>
+
+      <!-- Main Visual Stage Card -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 sm:p-8 backdrop-blur shadow-2xl">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          
+          <!-- Animated SVG Circuit Diagram -->
+          <div class="lg:col-span-7 bg-slate-950 rounded-xl p-5 border border-slate-800/90 relative overflow-hidden">
+            <div class="flex items-center justify-between pb-3 mb-4 border-b border-slate-800 text-xs font-mono text-slate-400">
+              <span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-500"></span> Live Pipeline Diagram</span>
+              <span id="diagramStatus">Active: Step 1 / 5</span>
+            </div>
+
+            <svg viewBox="0 0 640 280" class="w-full h-auto">
+              <!-- Grid background -->
+              <defs>
+                <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                  <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(51, 65, 85, 0.15)" stroke-width="1"/>
+                </pattern>
+                <linearGradient id="glowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stop-color="#3b82f6"/>
+                  <stop offset="100%" stop-color="#8b5cf6"/>
+                </linearGradient>
+              </defs>
+              <rect width="640" height="280" fill="url(#grid)" />
+
+              <!-- Stage 1: Hermes Core -->
+              <g id="svgStage1" class="transition-opacity duration-300">
+                <rect x="20" y="40" width="160" height="200" rx="10" fill="#0f172a" stroke="#334155" stroke-width="1.5"/>
+                <text x="100" y="70" text-anchor="middle" fill="#94a3b8" font-size="11" font-family="monospace">HERMES ENGINE</text>
+                <rect x="35" y="90" width="130" height="35" rx="6" fill="#1e293b"/>
+                <text x="100" y="112" text-anchor="middle" fill="#f8fafc" font-size="11" font-weight="600">User Session</text>
+                <rect x="35" y="135" width="130" height="35" rx="6" fill="#1e293b"/>
+                <text x="100" y="157" text-anchor="middle" fill="#cbd5e1" font-size="11">Reasoning Effort</text>
+                <rect x="35" y="180" width="130" height="35" rx="6" fill="#1e293b"/>
+                <text x="100" y="202" text-anchor="middle" fill="#93c5fd" font-size="10">Model: gemini-4-argon</text>
+              </g>
+
+              <!-- Connector 1 -> 2 -->
+              <path d="M 180 140 L 240 140" stroke="#3b82f6" stroke-width="2.5" class="animate-flow"/>
+
+              <!-- Stage 2: hermes-antigravity-oauth Provider -->
+              <g id="svgStage2" class="transition-opacity duration-300">
+                <rect x="240" y="30" width="180" height="220" rx="10" fill="#0f172a" stroke="#3b82f6" stroke-width="2"/>
+                <text x="330" y="60" text-anchor="middle" fill="#60a5fa" font-size="11" font-weight="600" font-family="monospace">PROVIDER PLUGIN</text>
+                
+                <!-- Subcomponents -->
+                <rect x="255" y="80" width="150" height="32" rx="5" fill="#1e293b" stroke="#334155"/>
+                <text x="330" y="100" text-anchor="middle" fill="#f1f5f9" font-size="10">Isolated Profile Root</text>
+
+                <rect x="255" y="120" width="150" height="32" rx="5" fill="#1e293b" stroke="#334155"/>
+                <text x="330" y="140" text-anchor="middle" fill="#f1f5f9" font-size="10">Env Sanitizer & Keyring</text>
+
+                <rect x="255" y="160" width="150" height="32" rx="5" fill="#1e293b" stroke="#334155"/>
+                <text x="330" y="180" text-anchor="middle" fill="#f1f5f9" font-size="10">Persistent stream-json</text>
+
+                <rect x="255" y="200" width="150" height="32" rx="5" fill="#1e293b" stroke="#ef4444" stroke-dasharray="3 3"/>
+                <text x="330" y="220" text-anchor="middle" fill="#fca5a5" font-size="10">Native Tool Interceptor</text>
+              </g>
+
+              <!-- Connector 2 -> 3 -->
+              <path d="M 420 140 L 480 140" stroke="#8b5cf6" stroke-width="2.5" class="animate-flow"/>
+
+              <!-- Stage 3: Official agy CLI & Cloud -->
+              <g id="svgStage3" class="transition-opacity duration-300">
+                <rect x="480" y="40" width="140" height="200" rx="10" fill="#0f172a" stroke="#8b5cf6" stroke-width="1.5"/>
+                <text x="550" y="70" text-anchor="middle" fill="#c084fc" font-size="11" font-family="monospace">OFFICIAL AGY CLI</text>
+
+                <rect x="495" y="90" width="110" height="35" rx="6" fill="#1e293b"/>
+                <text x="550" y="112" text-anchor="middle" fill="#f8fafc" font-size="11" font-weight="600">OAuth Pipe</text>
+
+                <rect x="495" y="135" width="110" height="35" rx="6" fill="#1e293b"/>
+                <text x="550" y="157" text-anchor="middle" fill="#d8b4fe" font-size="10">Google Cloud API</text>
+
+                <rect x="495" y="180" width="110" height="35" rx="6" fill="#1e293b"/>
+                <text x="550" y="202" text-anchor="middle" fill="#4ade80" font-size="10">Streaming Result</text>
+              </g>
+
+              <!-- Highlight Pulse Marker -->
+              <circle id="pulseMarker" cx="100" cy="140" r="8" fill="#3b82f6" class="transition-all duration-500">
+                <animate attributeName="r" values="6;12;6" dur="1.5s" repeatCount="indefinite"/>
+                <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.5s" repeatCount="indefinite"/>
+              </circle>
+            </svg>
+          </div>
+
+          <!-- Explanatory Details Box -->
+          <div class="lg:col-span-5 text-left">
+            <div id="stepInfoCard" class="space-y-4">
+              <span id="stepTag" class="px-2.5 py-1 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono text-xs font-semibold">
+                STEP 1: USER PROMPT & REASONING RESOLUTION
+              </span>
+              <h3 id="stepTitle" class="text-xl font-bold text-white tracking-tight">
+                Hermes Agent Dispatches Turn
+              </h3>
+              <p id="stepDesc" class="text-slate-300 text-sm leading-relaxed">
+                When a user sends a message or chooses a model in <code class="text-blue-300 font-mono">hermes model</code>, Hermes queries the <code class="text-blue-300 font-mono">AntigravityOAuthProfile</code>. The plugin dynamically checks reasoning parameters (<code class="text-slate-200">low</code>, <code class="text-slate-200">medium</code>, <code class="text-slate-200">high</code>) and maps aliases such as <code class="text-slate-200">gemini-pro ➔ gemini-4-argon</code>.
+              </p>
+              
+              <div class="bg-slate-950 p-3.5 rounded-lg border border-slate-800 font-mono text-xs text-slate-300 custom-scrollbar overflow-x-auto">
+                <div class="text-slate-500 mb-1">// IPC Payload Emitted:</div>
+                <div id="stepCode" class="text-blue-300">
+                  {"model": "gemini-4-argon", "reasoning_effort": "high", "stream": true}
+                </div>
+              </div>
+            </div>
+
+            <!-- Flow Step Controls -->
+            <div class="flex items-center gap-3 pt-6 border-t border-slate-800/80 mt-6">
+              <button onclick="prevStep()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">
+                ← Previous
+              </button>
+              <button onclick="nextStep()" class="px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow">
+                Next Step →
+              </button>
+              <button onclick="toggleAutoplay()" id="autoplayBtn" class="ml-auto text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Autoplay
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Supported Models Section -->
+  <section id="models" class="py-16 border-t border-slate-900 bg-slate-950">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <h2 class="text-xs uppercase tracking-widest font-mono text-indigo-400 font-semibold mb-2">Full Subscription Catalog</h2>
+        <p class="text-3xl font-bold text-white tracking-tight">Active Models on Google Antigravity</p>
+        <p class="text-slate-400 text-sm mt-3">The plugin dynamically queries the live <code class="text-indigo-300 font-mono text-xs">agy models</code> catalog, parsing effort configurations with a thread-safe 1-hour cache.</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        
+        <!-- Gemini 4 Argon -->
+        <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-blue-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-mono text-sm font-bold text-white">gemini-4-argon</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-blue-500/10 text-blue-400 border border-blue-500/20 font-semibold">Flagship</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">Google's frontier model for deep reasoning, mathematics, and large architecture planning.</p>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-slate-400">
+            <span>Context: 1,000,000</span>
+            <span class="text-slate-300">Effort: low, med, high</span>
+          </div>
+        </div>
+
+        <!-- Gemini 3.8 Flash -->
+        <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-blue-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-mono text-sm font-bold text-white">gemini-3.8-flash</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-semibold">Default</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">High-speed, low-latency daily driver for tool use, coding iteration, and fast conversational agent turns.</p>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-slate-400">
+            <span>Context: 1,000,000</span>
+            <span class="text-slate-300">Effort: low, med, high</span>
+          </div>
+        </div>
+
+        <!-- Claude Sonnet 5.5 -->
+        <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-purple-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-mono text-sm font-bold text-white">claude-sonnet-5-5</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold">Anthropic</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">State-of-the-art coding, full-repository refactoring, and multi-step agent tool calling under Hermes supervision.</p>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-slate-400">
+            <span>Context: 200,000</span>
+            <span class="text-slate-300">Effort: low, med, high</span>
+          </div>
+        </div>
+
+        <!-- Claude Opus 5.5 -->
+        <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-purple-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-mono text-sm font-bold text-white">claude-opus-5-5</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-purple-500/10 text-purple-400 border border-purple-500/20 font-semibold">Anthropic</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">Maximum depth of reasoning for complex scientific papers, theorem verification, and difficult bugs.</p>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-slate-400">
+            <span>Context: 200,000</span>
+            <span class="text-slate-300">Effort: low, med, high</span>
+          </div>
+        </div>
+
+        <!-- GPT-OSS 120B -->
+        <div class="p-5 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-amber-500/50 transition-all flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="font-mono text-sm font-bold text-white">gpt-oss-120b</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-amber-500/10 text-amber-400 border border-amber-500/20 font-semibold">Open MoE</span>
+            </div>
+            <p class="text-xs text-slate-400 mb-4">Open-weight foundation model served on Google's high-speed inference clusters with reasoning capabilities.</p>
+          </div>
+          <div class="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-slate-400">
+            <span>Context: 128,000</span>
+            <span class="text-slate-300">Effort: medium</span>
+          </div>
+        </div>
+
+        <!-- Automatic Aliases Card -->
+        <div class="p-5 rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 flex flex-col justify-between">
+          <div>
+            <div class="font-mono text-sm font-bold text-white mb-2">Automatic Legacy Aliases</div>
+            <p class="text-xs text-slate-400 mb-3">Older names redirect seamlessly without model errors:</p>
+            <ul class="text-xs font-mono text-slate-300 space-y-1">
+              <li>• gemini-pro ➔ gemini-4-argon</li>
+              <li>• gemini-3.1-pro ➔ gemini-4-argon</li>
+              <li>• claude-sonnet-4-6 ➔ claude-sonnet-5-5</li>
+              <li>• claude-opus-4-6 ➔ claude-opus-5-5</li>
+            </ul>
+          </div>
+          <div class="text-[11px] text-emerald-400 pt-3 border-t border-slate-800/80 font-mono">
+            ✓ 100% backward compatible
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Step-by-Step Installation Tabs -->
+  <section id="install" class="py-16 border-t border-slate-900 bg-slate-950/40">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center mb-10">
+        <h2 class="text-xs uppercase tracking-widest font-mono text-emerald-400 font-semibold mb-2">Get Started in 60 Seconds</h2>
+        <p class="text-3xl font-bold text-white tracking-tight">Installation Guide</p>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        
+        <!-- Platform Toggle Bar -->
+        <div class="flex items-center border-b border-slate-800 bg-slate-950/70 px-4 pt-2">
+          <button onclick="setPlatform('linux')" id="tabLinux" class="px-4 py-2.5 font-mono text-xs font-semibold border-b-2 border-blue-500 text-blue-400 transition">
+            Linux / Debian / Proxmox
+          </button>
+          <button onclick="setPlatform('windows')" id="tabWindows" class="px-4 py-2.5 font-mono text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+            Windows (PowerShell)
+          </button>
+        </div>
+
+        <!-- Linux Instructions -->
+        <div id="contentLinux" class="p-6 sm:p-8 space-y-6">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 font-semibold text-sm text-slate-200">
+              <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs flex items-center justify-center font-mono">1</span>
+              Install the Plugin via Hermes CLI
+            </div>
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-300">
+              hermes plugins install clockwork-dev/hermes-antigravity-oauth --enable
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 font-semibold text-sm text-slate-200">
+              <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs flex items-center justify-center font-mono">2</span>
+              Authenticate your Google Subscription
+            </div>
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-300">
+              hermes auth add antigravity-oauth
+            </div>
+            <p class="text-xs text-slate-400">Open the printed Google verification URL in your browser and approve OAuth access.</p>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 font-semibold text-sm text-slate-200">
+              <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs flex items-center justify-center font-mono">3</span>
+              Restart Services & Select Model
+            </div>
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-300">
+              systemctl --user restart hermes-dashboard.service<br>
+              hermes model
+            </div>
+          </div>
+        </div>
+
+        <!-- Windows Instructions -->
+        <div id="contentWindows" class="p-6 sm:p-8 space-y-6 hidden">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 font-semibold text-sm text-slate-200">
+              <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs flex items-center justify-center font-mono">1</span>
+              Install via Hermes CLI in PowerShell
+            </div>
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-300">
+              hermes plugins install clockwork-dev/hermes-antigravity-oauth --enable
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 font-semibold text-sm text-slate-200">
+              <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs flex items-center justify-center font-mono">2</span>
+              Authenticate Google OAuth
+            </div>
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-300">
+              hermes auth add antigravity-oauth
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 font-semibold text-sm text-slate-200">
+              <span class="w-5 h-5 rounded-full bg-blue-600/30 text-blue-400 text-xs flex items-center justify-center font-mono">3</span>
+              Launch Interactive Session
+            </div>
+            <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono text-xs text-slate-300">
+              hermes chat -q "Hello" --provider antigravity-oauth -m gemini-3.8-flash
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Technical Comparison & Security -->
+  <section id="security" class="py-16 border-t border-slate-900 bg-slate-950">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+      
+      <div class="text-center mb-12">
+        <h2 class="text-xs uppercase tracking-widest font-mono text-blue-400 font-semibold mb-2">Technical Benchmarks</h2>
+        <p class="text-3xl font-bold text-white tracking-tight">Built for Speed and Zero Token Leakage</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        <!-- Warm Pool vs Oneshot -->
+        <div class="p-6 rounded-xl bg-slate-900/60 border border-slate-800">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-sm">⚡</div>
+            <h3 class="font-bold text-white text-base">Warm Worker vs. Oneshot Cold Starts</h3>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed mb-4">
+            Legacy SDKs launch <code class="text-slate-300 font-mono">agy</code> from scratch on every turn, triggering full language server startup (~1.5–2.5s overhead). Our plugin maintains a hot background worker over bidirectional JSON streams, streaming replies without initiation lag.
+          </p>
+          <div class="bg-slate-950 p-3 rounded border border-slate-800 font-mono text-xs flex justify-between items-center text-slate-300">
+            <span>Subsequent Turn TTFT</span>
+            <span class="text-emerald-400 font-bold">&lt; 250ms latency</span>
+          </div>
+        </div>
+
+        <!-- Token Isolation -->
+        <div class="p-6 rounded-xl bg-slate-900/60 border border-slate-800">
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-sm">🔒</div>
+            <h3 class="font-bold text-white text-base">Isolated Profile & Zero-Exfiltration</h3>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed mb-4">
+            Instead of sharing your personal desktop <code class="text-slate-300 font-mono">~/.gemini</code> configuration, Hermes uses an isolated profile root (<code class="text-slate-300 font-mono">~/.hermes/antigravity-oauth/</code>). Python memory never reads or exposes your OAuth tokens.
+          </p>
+          <div class="bg-slate-950 p-3 rounded border border-slate-800 font-mono text-xs flex justify-between items-center text-slate-300">
+            <span>Keyring Secret Exposure</span>
+            <span class="text-blue-400 font-bold">0 bytes read by Python</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-900 bg-slate-950 text-slate-500 text-xs text-center font-mono">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div>hermes-antigravity-oauth · Distributed under the MIT License</div>
+      <div class="flex items-center gap-4 text-slate-400">
+        <a href="https://github.com/clockwork-dev/hermes-antigravity-oauth" class="hover:text-white">GitHub Repo</a>
+        <span>·</span>
+        <a href="https://github.com/nousresearch/hermes-agent" class="hover:text-white">Hermes Agent</a>
+        <span>·</span>
+        <a href="https://antigravity.google" class="hover:text-white">Google Antigravity</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Interactive JavaScript Logic -->
+  <script>
+    const stepsData = {
+      1: {
+        tag: "STEP 1: USER PROMPT & REASONING RESOLUTION",
+        title: "Hermes Agent Dispatches Turn",
+        desc: "When a user inputs a query or selects a model in hermes model, Hermes calls AntigravityOAuthProfile. The plugin dynamically checks reasoning parameters (low, medium, high) and resolves aliases like gemini-pro ➔ gemini-4-argon.",
+        code: '{\n  "model": "gemini-4-argon",\n  "reasoning_effort": "high",\n  "stream": true\n}',
+        cx: 100, cy: 140
+      },
+      2: {
+        tag: "STEP 2: TOKEN CUSTODY & ZERO-EXFILTRATION",
+        title: "Sandbox Token Linking",
+        desc: "The plugin locates the OAuth token in ~/.hermes/antigravity-oauth/ without loading secrets into Python memory. It links or creates a restricted file descriptor inside a temporary workspace, stripping all dangerous environment variables (LD_PRELOAD, proxy keys).",
+        code: '// build_clean_child_env()\nENV: {"HOME": "/tmp/hermes_isolated_xyz", "ANTIGRAVITY_CONFIG_DIR": "..."}\nSTRIPPED: ["LD_PRELOAD", "PYTHONPATH", "ANTHROPIC_API_KEY"]',
+        cx: 290, cy: 95
+      },
+      3: {
+        tag: "STEP 3: WARM WORKER STREAM-JSON PIPE",
+        title: "Bidirectional Stream Communication",
+        desc: "Instead of cold-starting a full CLI process, the request is written directly to the warm agy --input-format stream-json worker pipe. This achieves instant execution and avoids language-server initialization latency.",
+        code: 'write_stdin(\n  {"event": "user", "message": {"content": "Explain QKD"}}\n)',
+        cx: 370, cy: 175
+      },
+      4: {
+        tag: "STEP 4: NATIVE TOOL GUARD INTERCEPTION",
+        title: "Enforcing Hermes Permission Boundary",
+        desc: "If agy attempts to invoke built-in host tools (run_command, view_file), the plugin immediately halts the subprocess and re-issues the tool call through Hermes's native tool router, requiring user approval.",
+        code: '// Tool Safety Boundary Active:\nIntercepted agy.run_command ➔ Routed to hermes.terminal under user consent.',
+        cx: 330, cy: 215
+      },
+      5: {
+        tag: "STEP 5: STREAMING CHUNKS & TOKEN ROTATION",
+        title: "Progressive Delivery to Hermes",
+        desc: "Raw text chunks and tool_calls are parsed and yielded to the Hermes streaming interface. If agy rotates or refreshes the OAuth token, the updated credential is automatically synchronized back to disk.",
+        code: 'yield StreamChunk(delta="Quantum key distribution...", finish_reason=None)\nSyncing rotated token ➔ ~/.hermes/antigravity-oauth/...',
+        cx: 550, cy: 140
+      }
+    };
+
+    let currentStep = 1;
+    let autoplayInterval = null;
+
+    function selectStep(step) {
+      currentStep = step;
+      const data = stepsData[step];
+
+      document.getElementById('stepTag').innerText = data.tag;
+      document.getElementById('stepTitle').innerText = data.title;
+      document.getElementById('stepDesc').innerText = data.desc;
+      document.getElementById('stepCode').innerText = data.code;
+      document.getElementById('diagramStatus').innerText = `Active: Step ${step} / 5`;
+
+      // Update button highlights
+      for (let i = 1; i <= 5; i++) {
+        const btn = document.getElementById(`stepBtn-${i}`);
+        if (i === step) {
+          btn.className = "step-btn active p-3 rounded-xl border text-left transition-all bg-blue-600/10 border-blue-500 text-blue-300 shadow";
+        } else {
+          btn.className = "step-btn p-3 rounded-xl border text-left transition-all bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200";
+        }
+      }
+
+      // Move Pulse Marker on SVG
+      const marker = document.getElementById('pulseMarker');
+      marker.setAttribute('cx', data.cx);
+      marker.setAttribute('cy', data.cy);
+    }
+
+    function nextStep() {
+      const next = currentStep >= 5 ? 1 : currentStep + 1;
+      selectStep(next);
+    }
+
+    function prevStep() {
+      const prev = currentStep <= 1 ? 5 : currentStep - 1;
+      selectStep(prev);
+    }
+
+    function toggleAutoplay() {
+      const btn = document.getElementById('autoplayBtn');
+      if (autoplayInterval) {
+        clearInterval(autoplayInterval);
+        autoplayInterval = null;
+        btn.innerHTML = '<span class="w-2 h-2 rounded-full bg-slate-500"></span> Autoplay';
+      } else {
+        autoplayInterval = setInterval(nextStep, 3500);
+        btn.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Playing...';
+      }
+    }
+
+    function setPlatform(os) {
+      const tabLinux = document.getElementById('tabLinux');
+      const tabWindows = document.getElementById('tabWindows');
+      const contentLinux = document.getElementById('contentLinux');
+      const contentWindows = document.getElementById('contentWindows');
+
+      if (os === 'linux') {
+        tabLinux.className = "px-4 py-2.5 font-mono text-xs font-semibold border-b-2 border-blue-500 text-blue-400 transition";
+        tabWindows.className = "px-4 py-2.5 font-mono text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition";
+        contentLinux.classList.remove('hidden');
+        contentWindows.classList.add('hidden');
+      } else {
+        tabWindows.className = "px-4 py-2.5 font-mono text-xs font-semibold border-b-2 border-blue-500 text-blue-400 transition";
+        tabLinux.className = "px-4 py-2.5 font-mono text-xs font-semibold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition";
+        contentWindows.classList.remove('hidden');
+        contentLinux.classList.add('hidden');
+      }
+    }
+
+    function copyInstallCmd() {
+      const cmd = "hermes plugins install clockwork-dev/hermes-antigravity-oauth --enable";
+      navigator.clipboard.writeText(cmd).then(() => {
+        const text = document.getElementById('copyText');
+        text.innerText = "Copied!";
+        setTimeout(() => { text.innerText = "Copy"; }, 2000);
+      });
+    }
+
+    // Initialize Autoplay on page load
+    autoplayInterval = setInterval(nextStep, 4000);
+  </script>
+
+</body>
+</html>
