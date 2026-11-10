@@ -35,6 +35,8 @@ hermes model
 
 ```bash
 hermes gateway restart
+# Or if running the web dashboard as a systemd user service:
+systemctl --user restart hermes-dashboard.service
 ```
 
 ### 2. Windows (PowerShell)
