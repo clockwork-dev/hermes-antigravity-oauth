@@ -1,153 +1,206 @@
-# Hermes Antigravity OAuth Provider (`antigravity-oauth`)
+# Hermes Antigravity OAuth Provider (`antigravity-oauth`) — Full LLM Specification & Context
 
-> High-performance, cross-platform (`Windows`, `Debian/Ubuntu Linux`, `macOS`), zero-exfiltration `model-provider` plugin for **Hermes Agent** (`>=0.21.4`, tested on `v0.23.0`) that routes **Google Antigravity** personal, Pro, and Ultra subscriptions through the official `agy` CLI binary.
-
----
-
-## 1. Repository File Map
-
-- `[plugin.yaml](plugin.yaml)`: Hermes plugin manifest (`kind: model-provider`, `name: antigravity-oauth`, `version: 1.1.0`, `requires_hermes: ">=0.21.4"`).
-- `[pyproject.toml](pyproject.toml)`: PEP 621 metadata (`requires-python = ">=3.11"`, zero external PyPI dependencies; uses Hermes runtime + Python stdlib).
-- `[__init__.py](__init__.py)`: Entry point loaded by Hermes at provider discovery time. Defines `AntigravityOAuthProfile(ProviderProfile)` and calls `register_provider(antigravity_oauth_profile)`.
-- `[client.py](client.py)`: OpenAI-compatible client (`AntigravityClient`) exposing `.chat.completions.create()`, `.responses.create()`, `.cancel()`, and `.close()`. Manages a persistent warm `agy` worker subprocess, falls back to oneshot subprocesses on concurrent turns, tracks `--conversation` state for delta prompts, and cleans up temporary workspaces via `_force_rmtree()`.
-- `[process.py](process.py)`: Cross-platform binary resolution (`resolve_antigravity_binary`), Hermes-isolated profile path resolution (`resolve_hermes_antigravity_home`), zero-exfiltration OAuth verification (`check_antigravity_auth`, `check_antigravity_token_file_evidence`, `describe_antigravity_auth_source`), isolated `HOME` builder (`setup_isolated_home`), token refresh write-back (`sync_updated_isolated_tokens`), isolated login/logout (`run_isolated_antigravity_login`, `remove_isolated_antigravity_auth`), environment sanitization (`build_clean_child_env`), process-group lifecycle (`popen_isolated_session`, `terminate_process_group`), `StderrDrainer`, and `watch_log_for_errors`.
-- `[stream.py](stream.py)`: Synchronous (`__iter__`/`__next__`) and asynchronous (`__await__`/`__aiter__`/`__anext__`) iterator (`AntigravityStream`) parsing `agy --output-format stream-json` NDJSON events into OpenAI `ChatCompletionChunk` objects. Implements progressive `<tool_call>` tag extraction, native `agy` tool interception, worker usage delta calculation, and non-streaming aggregation (`collect_stream_completion`, `_AwaitableCompletion`).
-- `[prompt.py](prompt.py)`: Serializes OpenAI `messages` and `tools` into a single structured prompt (`build_prompt_from_messages`) or multi-turn delta (`format_delta_messages`). Injects a tool-bridge directive so `agy` emits `<tool_call>` JSON blocks instead of invoking its own internal tools, prunes historical tool outputs beyond the 8 most recent (`_MAX_UNPRUNED_RECENT_TOOLS = 8`), and extracts multimodal data-URI images into temporary files.
-- `[models.py](models.py)`: Dynamic model catalog discovery via `agy models` (`get_model_catalog`, 300s TTL cache), static fallback catalog (`_FALLBACK_MODELS`, `_FALLBACK_FAMILIES`), cross-version family alias resolution (`resolve_model_family_alias` bridging `claude-sonnet-4-6` <-> `claude-sonnet-5-5`, etc.), and `(base_model, effort_suffix)` parsing (`parse_model_and_effort`).
-- `[usage.py](usage.py)`: Queries `agy -p "/usage" --output-format json` (`fetch_antigravity_usage`) with a 60s single-flight TTL cache and normalizes per-model quota windows into Hermes `UsageSnapshot` / `UsageWindow` objects.
-- `[delivery.py](delivery.py)`: Helpers (`strip_leaked_tags`, `chunk_text_preserving_fences`, `prepare_gateway_delivery_chunks`) for cleaning leaked `<thinking>` / `<tool_call>` tags and splitting long responses for messaging gateways (Telegram/Discord) without breaking Markdown code fences.
-- `[debug.py](debug.py)`: Opt-in diagnostic prompt dumper (`dump_prompt_if_enabled`, controlled by `ANTIGRAVITY_DEBUG_PROMPT=1`) writing mode-`0600` JSON snapshots with automatic pruning (`_MAX_DUMP_FILES = 100`).
-- `[conftest.py](conftest.py)` & `[tests/test_antigravity_oauth.py](tests/test_antigravity_oauth.py)`: Hermetic `pytest` suite (23 tests) covering registration, error classification, zero-exfiltration keyring probes, account isolation, model/effort resolution, stream parsing, worker lock concurrency, token refresh persistence, and `validate_plugin_dir` admission checks.
+> Complete, authoritative architectural guide, protocol specification, invariants, and implementation details for AI agents and LLMs working on or maintaining `hermes-antigravity-oauth`.
+>
+> Target Platforms: Debian / Ubuntu Linux (`systemd` & headless SSH), Windows 10/11, macOS.
+> Runtime: Python 3.11–3.14. Hermes Agent: `>=0.21.4` (verified on `v0.23.0`). Zero external PyPI dependencies.
 
 ---
 
-## 2. Hermes Agent `model-provider` Contract & Invariants
+## 1. Executive Summary & Purpose
 
-1. **Import-Time Registration**:
-   - For `kind: model-provider` in `plugin.yaml`, Hermes does **not** call `register(ctx)`. Instead, Hermes imports `__init__.py` and expects `providers.register_provider(profile)` to be called at import time.
-   - Dual relative/top-level imports (`try: from .client import ... except ImportError: from client import ...`) are used across all modules so the package works both when loaded dynamically by `PluginManager` / `_PROBE_SCRIPT` and when imported in tests.
+`antigravity-oauth` is an official-standard `model-provider` plugin for **Hermes Agent**. It routes model inference through active Google Antigravity subscriptions (Personal, Pro, Ultra) via the official local `agy` CLI binary instead of metered per-token developer APIs.
 
-2. **Skip Transport & Async Wrapping**:
-   - Both `AntigravityOAuthProfile` and `AntigravityClient` set:
-     - `HERMES_SKIP_TRANSPORT_WRAP = True`
-     - `HERMES_SKIP_ASYNC_WRAP = True`
-   - Why: `AntigravityClient` manages local subprocess pipes rather than `httpx` sockets, and `AntigravityStream` / `_AwaitableCompletion` natively support both sync and `asyncio` (`await` / `async for`) consumption.
+Key capabilities:
+- **Zero-Exfiltration OAuth**: Probes OS keyrings and token files without ever exposing raw secrets in Python memory or logs.
+- **Account Isolation (`SSH_CONNECTION` Bypass)**: Stores Hermes-dedicated Google account credentials in `<hermes_home>/antigravity-oauth/.gemini/antigravity-cli/`, preventing collision with the user's personal `agy` CLI / IDE account.
+- **Bi-Directional `stream-json` v1.5+ Worker**: Pipelined persistent child process via NDJSON over `stdin`/`stdout` for instant turn latency, with oneshot fallback for concurrent subagents.
+- **Progressive Tool Calling & Native Tool Interception**: Translates OpenAI tool schemas, buffers `<tool_call>` XML/JSON blocks, and kills `agy` instantly if it attempts native tool execution.
+- **Cross-Platform Resilience**: Automatic write-back of refreshed OAuth tokens across filesystems/symlinks, posix process groups (`start_new_session` / `os.killpg`), Windows process groups (`CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW`), and `systemd` minimal PATH auto-repair.
 
-3. **`ProviderProfile` Dataclass Hooks**:
-   - `ProviderProfile` in Hermes Core is a `@dataclass` where `auth_handler`, `classify_api_error`, and `setup_reasoning_efforts` are dataclass fields defaulting to `None`.
-   - Always bind `self.auth_handler = self._handle_auth`, `self.classify_api_error = self._classify_error`, and `self.setup_reasoning_efforts = self.supported_reasoning_efforts` inside `AntigravityOAuthProfile.__init__()` after `super().__init__(*args, **kwargs)`.
+---
 
+## 2. Repository File Map & Responsibilities
+
+| File | Primary Responsibility | Critical Functions & Classes |
+| :--- | :--- | :--- |
+| `[plugin.yaml](plugin.yaml)` | Manifest metadata for Hermes Plugin Manager | `kind: model-provider`, `name: antigravity-oauth`, `version: 1.1.0`, `requires_hermes: ">=0.21.4"` |
+| `[pyproject.toml](pyproject.toml)` | PEP 621 package metadata | Declares zero external dependencies (pure stdlib + Hermes runtime) |
+| `[__init__.py](__init__.py)` | Hermes provider discovery entry point | `AntigravityOAuthProfile(ProviderProfile)`, `register_provider()`, `_handle_auth`, `_classify_error`, `build_api_kwargs_extras`, `setup_status` |
+| `[client.py](client.py)` | OpenAI-compatible client interface | `AntigravityClient`, `_ChatAdapter`, `_CompletionsAdapter`, `_ResponsesAdapter`, persistent worker pool (`_ensure_worker`), `_spawn_oneshot`, `cancel()`, `close()`, `_force_rmtree` |
+| `[process.py](process.py)` | Subprocess management & auth security | `resolve_antigravity_binary`, `resolve_hermes_antigravity_home`, `check_antigravity_auth`, `setup_isolated_home`, `sync_updated_isolated_tokens`, `run_isolated_antigravity_login`, `build_clean_child_env`, `popen_isolated_session`, `terminate_process_group`, `StderrDrainer` |
+| `[stream.py](stream.py)` | NDJSON event streaming & parser | `AntigravityStream` (sync + async iterator), progressive `<tool_call>` extraction, native tool abortion, cumulative worker usage delta math, `collect_stream_completion`, `_AwaitableCompletion` |
+| `[prompt.py](prompt.py)` | Message serialization & tool bridging | `build_prompt_from_messages`, `format_delta_messages`, historical tool output pruning (`_MAX_UNPRUNED_RECENT_TOOLS = 8`), multimodal data-URI image extraction |
+| `[models.py](models.py)` | Dynamic catalog & alias resolution | `get_model_catalog` (300s TTL cache), `parse_model_and_effort`, `resolve_model_family_alias` (`claude-sonnet-4-6` <-> `5-5`), fallback catalog |
+| `[usage.py](usage.py)` | Subscription quota checking (`/usage`) | `fetch_antigravity_usage` (single-flight lock, 60s TTL cache), `UsageSnapshot`, `UsageWindow` |
+| `[delivery.py](delivery.py)` | Gateway formatting helpers | `strip_leaked_tags`, `chunk_text_preserving_fences`, `prepare_gateway_delivery_chunks` |
+| `[debug.py](debug.py)` | Diagnostic logging | `dump_prompt_if_enabled` (opt-in via `ANTIGRAVITY_DEBUG_PROMPT=1`, mode `0600`) |
+| `[conftest.py](conftest.py)` | Pytest isolation fixture | Creates throwaway `HERMES_HOME` for hermetic testing |
+| `[tests/test_antigravity_oauth.py](tests/test_antigravity_oauth.py)` | 23-test regression suite | Covers auth, env sanitization, catalog, streaming, worker concurrency races, token refresh writeback, and plugin admission |
+
+---
+
+## 3. Strict Coding Invariants & Contracts
+
+### A. Hermes `model-provider` Lifecycle Contract
+1. **Import-Time Registration**: Hermes does **not** call `register(ctx)` for `kind: model-provider`. The provider MUST call `providers.register_provider(profile)` at module import time in `__init__.py`.
+2. **Dataclass Field Initialization**: `ProviderProfile` in Hermes Core is a `@dataclass` whose callback fields default to `None`. In `AntigravityOAuthProfile.__init__()`, you MUST explicitly assign:
+   ```python
+   super().__init__(*args, **kwargs)
+   self.auth_handler = self._handle_auth
+   self.classify_api_error = self._classify_error
+   self.setup_reasoning_efforts = self.supported_reasoning_efforts
+   ```
+3. **Transport Flags**: Always declare:
+   ```python
+   HERMES_SKIP_TRANSPORT_WRAP = True
+   HERMES_SKIP_ASYNC_WRAP = True
+   ```
+   on both `AntigravityOAuthProfile` and `AntigravityClient`. Subprocess stdout pipes do not use HTTP transport or asyncio wrappers.
 4. **`build_api_kwargs_extras` Signature**:
-   - Hermes `run_agent.py` calls:
-     `profile.build_api_kwargs_extras(model, reasoning_config=..., config=..., reasoning_effort=..., **context)`
-   - It must accept `reasoning_config: dict | None = None` and `**context: Any` and return a 2-tuple `(extra_body_additions, top_level_kwargs)`.
+   Hermes `run_agent.py` calls this method with keyword arguments:
+   `profile.build_api_kwargs_extras(model, reasoning_config=..., config=..., reasoning_effort=..., **context)`
+   - Signature MUST accept `reasoning_config: dict[str, Any] | None = None` and `**context: Any`.
+   - Must return a 2-tuple of dicts: `(extra_body_additions, top_level_kwargs)`. Example: `({"reasoning_effort": "medium"}, {"reasoning_effort": "medium"})` or `({}, {})`.
 
-5. **Error Classification (`_classify_error`)**:
-   - Returns a dict `{"reason": ..., "retryable": bool, "should_compress": bool, "should_fallback": bool}` or `None` (to defer to Hermes Core):
-     - Output token cutoff (`"exceeded the output token limit"`, `"previous response was cut off"`) -> `reason="server_error"`, `retryable=True`, `should_compress=False`.
-     - Context/trajectory overflow (`"max_trajectory_tokens"`, `"subscriber fell behind"`, `"prompt is too long"`) -> `reason="context_overflow"`, `retryable=True`, `should_compress=True`.
-     - Quota/credits exhausted (`"ai credits balance is too low"`, `"insufficient credits"`) -> `reason="billing"`, `retryable=False`, `should_fallback=True`.
-     - Auth/verification required (`"verify your account"`, `"oauth token expired"`, `"invalid_grant"`) -> `reason="auth_permanent"`, `retryable=False`, `should_fallback=True`.
-     - Rate limit (`"resource_exhausted"`, `"exhausted your capacity"`, `"429 too many requests"`) -> `reason="rate_limit"`, `retryable=True`, `should_fallback=True`.
+### B. Subprocess Worker Lock & Concurrency Invariant
+In `client.py` (`_create_chat_completion`):
+- `_worker_lock: threading.Lock` serializes access to the persistent warm worker.
+- If `_worker_lock.acquire(blocking=False)` succeeds, lock ownership is **transferred** to the instantiated `AntigravityStream` (`lock_transferred_to_stream = True`).
+- `AntigravityStream` releases `_worker_lock` in its cleanup block when the turn completes.
+- **CRITICAL**: The `finally:` block in `_create_chat_completion` MUST only release `_worker_lock` if `acquired_worker_lock and not lock_transferred_to_stream`. If ownership was transferred, releasing it in `_create_chat_completion`'s `finally:` would release another thread's lock if that thread acquired it immediately after the stream completed!
+- When `_worker_lock` is already held (e.g. concurrent subagents), turns fall back to `_spawn_oneshot()`.
 
----
+### C. Zero-Exfiltration OS Keyring Probes
+Never read or store secret token payloads into Python variables or logs during verification:
+- **Windows**: Call `cmdkey /list:gemini:antigravity` via `subprocess.run(capture_output=True)`. Check returncode and verify `"gemini:antigravity"` is in stdout. Credential blobs are never returned by cmdkey.
+- **macOS**: Call `/usr/bin/security find-generic-password -s gemini -a antigravity` with `stdout=DEVNULL, stderr=DEVNULL`. Never pass `-w` or `-g`.
+- **Linux**: Call `secret-tool search --all service gemini username antigravity` with `stdout=subprocess.DEVNULL, stderr=subprocess.PIPE`. Secret payloads are dumped to stdout (discarded by the kernel), while item DBus paths (`[/org/freedesktop/secrets/...]`) arrive on stderr for safe verification.
 
-## 3. `agy` CLI Wire Protocol (`stream-json` v1.5+)
+### D. Account Isolation & `SSH_CONNECTION` Bypass
+- Antigravity CLI uses Go's `zalando/go-keyring`. It contains an internal bypass: if `os.Getenv("SSH_CONNECTION") != ""`, it disables desktop GUI prompts and OS keyring storage, falling back to file token storage at `$HOME/.gemini/antigravity-cli/antigravity-oauth-token` and printing the browser URL to stdout for manual copy-pasting.
+- `run_isolated_antigravity_login()` and `build_clean_child_env()` inject `SSH_CONNECTION="127.0.0.1 0 127.0.0.1 22"` when operating on isolated profiles.
+- **Interactive Setup Wizard Caveat**: Hermes's built-in `hermes setup model` executes `login_command` directly without custom env vars. This defaults to writing credentials into the host OS keyring. Users who need account isolation MUST run `hermes auth add antigravity-oauth` instead.
 
-### Persistent Worker Mode (`_ensure_worker`)
-- Spawned with:
-  `agy --input-format stream-json --output-format stream-json --model <effective_model> [--effort <effort>]`
-- Each user turn is written as a single NDJSON line to `stdin`:
-  `{"event": "user", "message": {"content": "<prompt_text>"}}\n`
-- **Important**: Newer `agy` (`v1.5+`) expects `"event": "user"` on `stdin` (legacy versions used `"type": "user"`).
+### E. Refreshed Token Write-Back (`sync_updated_isolated_tokens`)
+- Workers run in scratch workspaces (`<temp_cwd>/home`).
+- When `agy` refreshes an expired access token using its refresh token, Go atomic file rename replaces the target file in `<temp_cwd>/home/.gemini/antigravity-cli/`.
+- Across filesystems (e.g., Debian Linux `/tmp` on `tmpfs` vs `/home` on `ext4`) or on Windows (where `os.symlink` falls back to `copy2`), the persistent token file in `<hermes_home>/antigravity-oauth/` is not automatically updated by the OS.
+- `sync_updated_isolated_tokens()` inspects token mtimes and copies any newer token back to `<hermes_home>` with mode `0600` on stream completion and worker exit.
 
-### Oneshot Mode (`_spawn_oneshot`)
-- Used when `_worker_lock` is already held by a concurrent turn (e.g. parallel subagents) or when resuming a prior `--conversation <id>` via CLI flag:
-  `agy --output-format stream-json --model <effective_model> [--effort <effort>] [--conversation <id>]`
-- Prompt text is written to `stdin` followed by `stdin.close()`.
-
-### `stdout` Event Formats (`AntigravityStream._process_event`)
-`AntigravityStream` supports both current (`agy v1.5+`, keyed by `"event"`) and legacy (`agy v1.1-1.2`, keyed by `"type"`) NDJSON objects:
-1. **Session Init**:
-   - v1.5+: `{"event": "init", "session_id": "..."}`
-   - Legacy: `{"type": "system", "conversation_id": "..."}`
-2. **Incremental Step Update (v1.5+)**:
-   - `{"event": "step_update", "type": "thinking", "content": "..."}` -> emitted as `Delta(reasoning_content=...)`
-   - `{"event": "step_update", "type": "text", "content": "..."}` -> routed through `_feed_text_delta()`
-   - `{"event": "step_update", "type": "tool" | "tool_call" | "tool_use" | "command" | "mcp", ...}` -> native tool attempt; immediately terminates the subprocess and finishes the turn cleanly so Hermes owns all tool execution.
-3. **Assistant Block (Legacy)**:
-   - `{"type": "assistant", "message": {"step_type": "...", "content": [{"type": "thinking"|"text", ...}]}}`
-4. **Turn Result**:
-   - `{"event": "result", "status": "success"|"error", "error": "...", "usage": {...}}` (or `"type": "result"`, `"is_error": bool`, `"stop_reason": ...`)
-   - In persistent worker mode, `usage` counters reported by `agy` are cumulative across the worker process lifetime; `AntigravityStream._build_turn_usage()` subtracts `_prev_worker_usage` to report accurate per-turn token counts to Hermes.
-
-### Model & Reasoning Effort Resolution (`_resolve_model_and_effort`)
-- `agy` encodes reasoning effort directly in the model ID suffix for multi-effort families (e.g., `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`, `gemini-3.8-flash-high`), while effortless families (`claude-sonnet-4-6`, `claude-opus-4-6-thinking`) take no suffix and reject `--effort`.
-- By default, `_resolve_model_and_effort()` appends the validated effort suffix to `--model` and omits `--effort` unless `ANTIGRAVITY_PASS_EFFORT_FLAG=1` is set.
+### F. Environment Sanitization & Safe Teardown
+- `build_clean_child_env()`:
+  - Strict mode (default): forwards only allowlisted variables (`PATH`, `LANG`, `LC_*`, `TERM`, `TMPDIR`, Windows essentials) + `ANTIGRAVITY_ENV_ALLOWLIST`.
+  - Blocks dynamic loader injection (`LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `PYTHONPATH`, `PYTHONHOME`, etc.).
+  - Pins `HOME`, `USERPROFILE`, and `XDG_CONFIG_HOME` to `isolated_home`.
+  - Linux: ensures `~/.local/bin`, `/usr/local/bin`, `/usr/bin`, `/bin` are present in `PATH` (vital under `systemd` minimal environments).
+- `_force_rmtree()`:
+  - Uses `onexc` on Python `>= 3.12` and `onerror` on Python `< 3.12`.
+  - `_chmod_writable_if_owned_unlinked()`: **Never** run `chmod` on a symlink or file with `st_nlink > 1` (hardlink), as this would alter permissions on the host's real token file.
 
 ---
 
-## 4. Cross-Platform OAuth & Account Isolation (`Windows` + `Debian Linux` + `macOS`)
+## 4. `agy` Wire Protocol Specifications (`stream-json` v1.5+)
 
-### Why Isolated Hermes Auth Exists
-By default, `agy acp --login` stores OAuth credentials in the global OS keyring (`gemini:antigravity` in Windows Credential Manager, macOS Login Keychain, or Linux Secret Service) or `~/.gemini/antigravity-cli/`. If a user logs into a secondary Google account for Hermes, global storage would overwrite their primary `agy` CLI / Antigravity IDE account. Furthermore, headless Debian Linux servers accessed over SSH often lack an unlocked `gnome-keyring` / D-Bus Secret Service daemon.
+### Subprocess Invocation Commands
+- **Persistent Worker (`_ensure_worker`)**:
+  ```bash
+  agy --input-format stream-json --output-format stream-json --model <effective_model> [--effort <effort>]
+  ```
+- **Oneshot Execution (`_spawn_oneshot`)**:
+  ```bash
+  agy --output-format stream-json --model <effective_model> [--effort <effort>] [--conversation <conversation_id>]
+  ```
 
-### How Isolation Works (`process.py`)
-1. **Dedicated Hermes Antigravity Home (`resolve_hermes_antigravity_home`)**:
-   - Priority:
-     1. `ANTIGRAVITY_HERMES_HOME` env var.
-     2. `HERMES_HOME` env var (`<HERMES_HOME>/antigravity-oauth`, used by Linux `systemd` units in `hermes gateway install`).
-     3. Windows: `~/AppData/Local/hermes/antigravity-oauth` (when `~/AppData/Local/hermes` exists).
-     4. Linux / macOS: `~/.hermes/antigravity-oauth` (or `<HERMES_DATA_DIR_SUFFIX>/antigravity-oauth`).
-2. **Keyring Bypass via `SSH_CONNECTION`**:
-   - `agy`'s internal `CompositeTokenStorage` checks `SSH_CONNECTION`. When `SSH_CONNECTION` is non-empty, `agy` bypasses the OS keyring and uses file-based token storage (`$HOME/.gemini/antigravity-cli/antigravity-oauth-token`) and headless copy-paste OAuth login.
-   - `run_isolated_antigravity_login()` (`hermes auth add antigravity-oauth`) runs `agy acp --login` with `HOME`, `USERPROFILE`, and `SSH_CONNECTION="127.0.0.1 0 127.0.0.1 22"`, saving the token exclusively inside `<hermes_antigravity_home>/.gemini/antigravity-cli/`.
-   - Both `antigravity-oauth-token` and `jetski-standalone-oauth-token` filenames are populated so all `agy` versions (`1.1` through `1.5+`) locate the credential.
-3. **Token Priority (`_resolve_oauth_token_candidates`)**:
-   - Checks `ANTIGRAVITY_CONFIG_DIR` -> Hermes-isolated profile (`<hermes_antigravity_home>/.gemini/antigravity-cli/`) -> global user profile (`~/.gemini/antigravity-cli/`) -> OS Keyring fallback (`_check_os_keyring_auth`).
-4. **Refreshed Token Persistence (`sync_updated_isolated_tokens`)**:
-   - Each `AntigravityClient` runs `agy` inside a temporary workspace (`<temp_cwd>/home`).
-   - On Debian Linux, `/tmp` is often `tmpfs` (separate filesystem from `/home`), and on Windows without Developer Mode, `_link_or_copy_token` falls back to `shutil.copy2`.
-   - When `agy` refreshes an expired `access_token` during a session, `sync_updated_isolated_tokens()` (called on stream completion and worker termination) copies any newer non-symlink token file from `<temp_cwd>/home/.gemini/` back to the persistent source token file with `0600` permissions.
-
----
-
-## 5. Security & `hermes plugins validate` Guardrails
-
-When modifying any file in this repository (including documentation and tests), preserve these strict invariants required by `hermes plugins validate` and `tools/plugin_guard.py`:
-1. **Zero Secret Exfiltration**:
-   - Never read or print OAuth secret payloads in keyring probes:
-     - Windows: `cmdkey /list:gemini:antigravity` (lists target metadata only).
-     - macOS: `/usr/bin/security find-generic-password -s gemini -a antigravity` (never pass `-w` or `-g`; bind `stdout=DEVNULL`).
-     - Linux: `secret-tool search --all service gemini username antigravity` with `stdout=subprocess.DEVNULL` (inspect `stderr` metadata path only).
-2. **Safe Workspace Cleanup (`_force_rmtree` & `_chmod_writable_if_owned_unlinked`)**:
-   - Never `chmod` a symlink or a file with `st_nlink > 1` (hardlinked token file) during temporary workspace teardown.
-   - Use `onexc` on Python `>= 3.12` and `onerror` on Python `< 3.12` in `shutil.rmtree`.
-3. **Plugin Guard (`security scan: safe`)**:
-   - Avoid writing shell pipe installers (`curl` piped to `sh`/`bash`) or realistic-looking API key literals (`sk-...`, `ghp_...`, `AKIA...`) in `.md` or `.txt` files, as `plugin_guard` flags them as `caution` or `dangerous`.
-   - Do not import private Hermes Core symbols disallowed by `plugin_validate_private_imports.py` or monkeypatch Hermes Core modules at runtime (`plugin_validate_core_override.py`).
-
----
-
-## 6. Development, Testing & Validation Commands
-
-### Run Unit & Admission Tests (`pytest`)
-Requires Hermes Core workspace and venv on `PYTHONPATH`:
-
-```powershell
-# Windows (PowerShell)
-$env:PYTHONPATH = "$env:LOCALAPPDATA\hermes\installs\<install_id>\environments\<env_id>\workspace;$env:LOCALAPPDATA\hermes\installs\<install_id>\environments\<env_id>\venv\Lib\site-packages"
-pytest tests -v
+### Input Event (Worker `stdin`)
+Each user turn is piped as a single JSON line terminated by newline:
+```json
+{"event": "user", "message": {"content": "<prompt_content>"}}\n
 ```
+*(Legacy `agy` supported `{"type": "user", ...}`; `v1.5+` expects `{"event": "user", ...}`)*
 
-```bash
-# Debian / Ubuntu Linux
-export PYTHONPATH="$HOME/.hermes/installs/<install_id>/environments/<env_id>/workspace:$HOME/.hermes/installs/<install_id>/environments/<env_id>/venv/lib/python3.12/site-packages"
-pytest tests -v
-```
+### Output Events (Worker / Oneshot `stdout`)
+`AntigravityStream` processes newline-delimited JSON objects:
+1. **Session Initialization**:
+   - `{"event": "init", "session_id": "conv-12345"}` (or legacy `{"type": "system", "conversation_id": "conv-12345"}`).
+   - Extracted and forwarded to `AntigravityClient` to enable multi-turn delta prompting.
+2. **Step Updates**:
+   - `{"event": "step_update", "type": "thinking", "content": "Analyzing context..."}` -> emitted as `ChatCompletionChunk(choices=[ChunkChoice(delta=ChoiceDelta(reasoning_content=...))])`.
+   - `{"event": "step_update", "type": "text", "content": "..."}` -> passed to `_feed_text_delta()`.
+   - `{"event": "step_update", "type": "tool"|"command"|"mcp", ...}` -> **Native `agy` tool execution**. The plugin immediately aborts the process (`terminate_process_group(proc)`), ending the turn cleanly with finish reason `stop` or `tool_calls`. Hermes Agent must always execute tools, never `agy`.
+3. **Turn Result**:
+   - `{"event": "result", "status": "success", "usage": {"input_tokens": 120, "output_tokens": 45}}`
+   - In worker mode, reported token counters are cumulative across the entire worker process life. `_build_turn_usage()` computes:
+     $$\text{turn\_usage} = \text{reported\_usage} - \text{prev\_worker\_usage}$$
+     and stores the new cumulative counters.
 
-### Run Hermes Admission Validator
-```bash
-hermes plugins validate /path/to/hermes-antigravity-oauth
+---
+
+## 5. Tool Bridging & Prompt Formatting
+
+### Custom Tool Calling Schema
+Because native `agy` tool execution is disallowed, `prompt.py` (`build_prompt_from_messages`) injects an explicit override into the prompt instructing the model to format tool invocations as:
+```xml
+<tool_call>
+{"id": "call_123", "type": "function", "function": {"name": "terminal", "arguments": "{\"cmd\": \"ls -la\"}"}}
+</tool_call>
 ```
-Expected result: `Validation passed.` (`0 warnings`, `0 failures`, `security scan — safe`).
+`stream.py` buffers streaming characters, suppresses emitting the `<tool_call>` tag text to the user, and parses the contained JSON into standard OpenAI `tool_calls` structures in `ChatCompletionChunk`.
+
+### Context Optimization & History Pruning
+- **Tool Output Pruning**: `_MAX_UNPRUNED_RECENT_TOOLS = 8`. In multi-turn conversations, tool results older than the 8 most recent are truncated to:
+  `[Historical tool output pruned for context efficiency: <first 100 chars>...]`
+- **Delta Turn Resumption**: When continuing an ongoing `conversation_id` whose message history prefix matches `_last_messages_prefix`, `format_delta_messages()` sends only newly added messages instead of re-sending the full conversation history.
+- **Cutoff Recovery**: If the prior turn was cut off due to output limits, `format_delta_messages()` detects the Hermes recovery nudge and formats an explicit continuation directive.
+- **Multimodal Extraction**: Base64 data-URIs (`data:image/...;base64,...`) are extracted and written to temporary image files in the isolated workspace, referenced by local path in the prompt.
+
+---
+
+## 6. Error Classification Engine (`_classify_error`)
+
+Maps raw CLI errors and log patterns to Hermes `FailoverReason` enum values:
+
+| Error Pattern | Mapped Reason | Retryable | Compress Prompt | Fallback Model |
+| :--- | :--- | :---: | :---: | :---: |
+| `"exceeded the output token limit"`, `"previous response was cut off"` | `server_error` | **Yes** | No | No |
+| `"max_trajectory_tokens"`, `"subscriber fell behind"`, `"prompt is too long"` | `context_overflow` | **Yes** | **Yes** | No |
+| `"ai credits balance is too low"`, `"insufficient credits"`, `"quota.*exhausted"` | `billing` | No | No | **Yes** |
+| `"verify your account"`, `"oauth token expired"`, `"unauthenticated"`, `"invalid_grant"` | `auth_permanent` | No | No | **Yes** |
+| `"resource_exhausted"`, `"429 too many requests"`, `"exhausted your capacity"` | `rate_limit` | **Yes** | No | **Yes** |
+| `"model not found"`, `"unknown model"` | `model_not_found` | No | No | **Yes** |
+
+---
+
+## 7. Model Catalog & Reasoning Effort Resolution
+
+1. **Dynamic Catalog Discovery (`get_model_catalog`)**:
+   Runs `agy models` on demand and caches for 300 seconds. Parsed families return supported effort levels:
+   - `gemini-4-argon`: `("low", "medium", "high")`
+   - `gemini-3.8-flash`: `("low", "medium", "high")`
+   - `claude-sonnet-5-5` / `claude-opus-5-5`: `("low", "medium", "high")`
+   - `claude-sonnet-4-6` / `claude-opus-4-6-thinking`: `()` (effortless family)
+   - `gpt-oss-120b`: `("medium",)` (single effort)
+2. **Cross-Version Aliases (`resolve_model_family_alias`)**:
+   - If running on `agy 1.1` where `claude-sonnet-4-6` exists, `claude-sonnet-5-5` maps to `4-6`.
+   - If running on `agy 1.2+` where `claude-sonnet-5-5` exists, `claude-sonnet-4-6` automatically maps to `5-5`.
+3. **CLI Effort Argument vs Suffix**:
+   By default, `agy` expects effort in the model ID suffix (`gemini-3.8-flash-high`) and rejects `--effort`. If `ANTIGRAVITY_PASS_EFFORT_FLAG=1`, `--effort <level>` is also passed.
+
+---
+
+## 8. Verification & Admission Guardrails (`hermes plugins validate`)
+
+The plugin must satisfy all checks enforced by `hermes_cli.plugin_validate` and `tools.plugin_guard`:
+1. **Forbidden Code & Doc Patterns**:
+   - Never place realistic sample API keys (e.g. literals matching `sk-[a-zA-Z0-9]{20,}`, `ghp_[a-zA-Z0-9]{20,}`, `AKIA[0-9A-Z]{16}`) in `.py`, `.md`, or `.txt` files — `plugin_guard` scans all files and flags them as critical/dangerous.
+   - Never write shell pipe installers (piping downloaded web scripts directly into an interpreter) in documentation files — flags a caution finding during admission scanning.
+2. **No Core Overrides**:
+   - Do not import private/internal Hermes core symbols flagged by `plugin_validate_private_imports.py` or attempt runtime monkeypatching of Hermes core modules (`plugin_validate_core_override.py`).
+3. **Validation Commands**:
+   ```bash
+   # 1. Run unit test suite (23 tests must pass)
+   pytest tests -v
+
+   # 2. Run plugin admission validator (must pass with 0 warnings, 0 failures, security scan: safe)
+   hermes plugins validate /path/to/hermes-antigravity-oauth
+   ```
