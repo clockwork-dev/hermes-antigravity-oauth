@@ -105,15 +105,15 @@
               </div>
             </div>
 
-            <!-- Install Command Card -->
+            <!-- Install & Auth Command Card -->
             <div class="space-y-1.5 pt-1">
-              <div class="text-xs font-mono text-slate-400">Install via Hermes Plugins Manager:</div>
+              <div class="text-xs font-mono text-slate-400">Install and authenticate in Hermes CLI:</div>
               <div class="flex flex-col sm:flex-row items-stretch gap-2 bg-[#0f172a] border border-slate-700 p-2 rounded">
                 <div class="flex items-center gap-2 px-2 py-1 font-mono text-xs text-slate-200 overflow-x-auto flex-grow select-all">
                   <span class="text-amber-400 font-bold">$</span>
-                  <span id="installCmd">hermes plugins install clockwork-dev/hermes-antigravity-oauth --enable</span>
+                  <span id="installCmd">hermes plugins install clockwork-dev/hermes-antigravity-oauth --enable &amp;&amp; hermes auth add antigravity-oauth</span>
                 </div>
-                <button id="copyBtn" type="button" onclick="copyInstallCmd()" class="min-h-[44px] px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded transition-colors flex items-center justify-center gap-1.5 shrink-0" aria-label="Copy installation command">
+                <button id="copyBtn" type="button" onclick="copyInstallCmd()" class="min-h-[44px] px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded transition-colors flex items-center justify-center gap-1.5 shrink-0" aria-label="Copy installation and auth commands">
                   <svg id="copyIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" stroke-width="2"></rect><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" stroke-width="2"></path></svg>
                   <span id="copyLabel">Copy</span>
                 </button>
@@ -421,14 +421,14 @@ agy auth login</pre>
           </div>
         </div>
 
-        <!-- Steps 2 & 3 Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Steps 2, 3 & 4 Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           
           <!-- Step 2 -->
           <div class="p-5 rounded bg-[#0f172a] border border-slate-800 space-y-3">
             <div class="flex items-center gap-2">
               <span class="text-xs font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20">STEP 2</span>
-              <h3 class="font-bold text-sm text-white">Install Plugin in Hermes</h3>
+              <h3 class="font-bold text-sm text-white">Install Plugin</h3>
             </div>
             <p class="text-xs text-slate-300 leading-relaxed">
               Install and enable the provider plugin in Hermes Agent using the native package manager:
@@ -438,11 +438,26 @@ agy auth login</pre>
   --enable</pre>
           </div>
 
-          <!-- Step 3 -->
+          <!-- Step 3: Auth Add -->
           <div class="p-5 rounded bg-[#0f172a] border border-slate-800 space-y-3">
             <div class="flex items-center gap-2">
               <span class="text-xs font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20">STEP 3</span>
-              <h3 class="font-bold text-sm text-white">Start Chatting in Hermes</h3>
+              <h3 class="font-bold text-sm text-white">Authenticate in Hermes</h3>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Register and link your Antigravity subscription into Hermes Agent credential storage:
+            </p>
+            <pre class="p-2.5 rounded bg-black text-slate-200 border border-slate-800 font-mono text-[11px] overflow-x-auto select-all">hermes auth add antigravity-oauth
+
+# Verify status:
+hermes auth status antigravity-oauth</pre>
+          </div>
+
+          <!-- Step 4 -->
+          <div class="p-5 rounded bg-[#0f172a] border border-slate-800 space-y-3">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20">STEP 4</span>
+              <h3 class="font-bold text-sm text-white">Start Chatting</h3>
             </div>
             <p class="text-xs text-slate-300 leading-relaxed">
               Launch interactive chat specifying any Antigravity model:
