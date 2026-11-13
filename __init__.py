@@ -9,9 +9,10 @@ from hermes_cli.auth_constants import AuthError
 from providers import register_provider
 from providers.base import ProviderProfile
 
-try:
+if __package__:
     from .client import AntigravityClient
     from .models import (
+        _FALLBACK_FAMILIES,
         _FALLBACK_MODELS,
         DEFAULT_MODEL,
         EFFORT_LEVELS,
@@ -36,9 +37,17 @@ try:
         sync_updated_isolated_tokens,
     )
     from .usage import fetch_antigravity_usage, invalidate_usage_cache
-except ImportError:
+else:
+    import os
+    import sys
+
+    _plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if _plugin_dir not in sys.path:
+        sys.path.insert(0, _plugin_dir)
+
     from client import AntigravityClient  # type: ignore[no-redef]
     from models import (  # type: ignore[no-redef]
+        _FALLBACK_FAMILIES,
         _FALLBACK_MODELS,
         DEFAULT_MODEL,
         EFFORT_LEVELS,

@@ -242,6 +242,7 @@ class ZeroExfiltrationAuthAndEnvironmentTests(unittest.TestCase):
         with (
             patch.object(process_mod.sys, "platform", "win32"),
             patch.object(process_mod, "_find_existing_oauth_token", return_value=None),
+            patch("os.path.isfile", return_value=True),
             patch("subprocess.run") as mock_run,
         ):
             mock_run.return_value = SimpleNamespace(
@@ -374,6 +375,30 @@ class ModelResolutionAndCatalogTests(unittest.TestCase):
                 self.assertEqual(
                     client._resolve_model_and_effort("gemini-4-argon", "high"),
                     ("gemini-4-argon-high", None),
+                )
+                client.close()
+
+    def test_gemini_4_hydrogen_and_orchestrator_resolution(self) -> None:
+        fallback_fams = dict(models_mod._FALLBACK_FAMILIES)
+        with patch.object(models_mod, "get_model_catalog", return_value=(models_mod._FALLBACK_MODELS, fallback_fams)):
+            with tempfile.TemporaryDirectory() as tmp:
+                client = AntigravityClient(binary="agy", cwd=tmp)
+                for eff in ("low", "medium", "high", "xhigh"):
+                    self.assertEqual(
+                        client._resolve_model_and_effort("gemini-4-hydrogen", eff),
+                        (f"gemini-4-hydrogen-{eff}", None),
+                    )
+                self.assertEqual(
+                    client._resolve_model_and_effort("gemini-hydrogen", "xhigh"),
+                    ("gemini-4-hydrogen-xhigh", None),
+                )
+                self.assertEqual(
+                    client._resolve_model_and_effort("gemini-pro-orchestrator-g1-pro", "medium"),
+                    ("gemini-pro-orchestrator-g1-pro", None),
+                )
+                self.assertEqual(
+                    client._resolve_model_and_effort("gemini-orchestrator", "high"),
+                    ("gemini-pro-orchestrator-g1-pro", None),
                 )
                 client.close()
 
@@ -542,6 +567,84 @@ class UsageSingleFlightTests(unittest.TestCase):
             self.assertEqual(snap1.windows[0].label, "Gemini 3.8 Flash")
             self.assertEqual(snap1.windows[0].used_percent, 25.0)
             self.assertEqual(snap1.windows[1].used_percent, 60.0)
+
+    def test_usage_modern_agy_1_5_8_groups_and_buckets(self) -> None:
+        modern_json = json.dumps({
+            "status": "SUCCESS",
+            "command": {
+                "name": "usage",
+                "data": {
+                    "plan": "Google Antigravity Ultra",
+                    "groups": [
+                        {
+                            "name": "Gemini Models",
+                            "buckets": [
+                                {
+                                    "id": "gemini-weekly",
+                                    "name": "Weekly Limit Remaining",
+                                    "window": "weekly",
+                                    "remaining_fraction": 0.60,
+                                    "reset_time": "2026-11-17T18:14:29Z",
+                                },
+                                {
+                                    "id": "gemini-5h",
+                                    "name": "Five Hour Limit Remaining",
+                                    "window": "5h",
+                                    "remaining_fraction": 0.80,
+                                    "reset_time": "2026-11-13T13:23:56Z",
+                                },
+                            ],
+                        },
+                        {
+                            "name": "Gemini 4 Argon",
+                            "buckets": [
+                                {
+                                    "id": "gemini-argon-weekly",
+                                    "name": "Gemini 4 Argon Weekly Limit",
+                                    "window": "weekly",
+                                    "remaining_fraction": 1.0,
+                                    "reset_time": "2026-11-17T18:24:02Z",
+                                },
+                            ],
+                        },
+                    ],
+                },
+            },
+        })
+        with (
+            patch.object(usage_mod, "resolve_antigravity_binary", return_value="/usr/local/bin/agy"),
+            patch("subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=modern_json)),
+        ):
+            snap = fetch_antigravity_usage()
+            self.assertIsNotNone(snap)
+            self.assertEqual(snap.plan, "Google Antigravity Ultra")
+            self.assertEqual(len(snap.windows), 3)
+            self.assertEqual(snap.windows[0].label, "Gemini Models - Weekly Limit Remaining")
+            self.assertEqual(snap.windows[0].used_percent, 40.0)
+            self.assertEqual(snap.windows[1].label, "Gemini Models - Five Hour Limit Remaining")
+            self.assertEqual(snap.windows[1].used_percent, 20.0)
+            self.assertEqual(snap.windows[2].label, "Gemini 4 Argon Weekly Limit")
+            self.assertEqual(snap.windows[2].used_percent, 0.0)
+
+    def test_usage_tsv_fallback_parsing(self) -> None:
+        tsv_json = json.dumps({
+            "status": "SUCCESS",
+            "response": (
+                "Gemini Models\tWeekly Limit Remaining\t60%\t2026-11-17T18:14:29Z\n"
+                "Claude and GPT models\tFive Hour Limit Remaining\t90%\t2026-11-13T14:04:00Z\n"
+            ),
+        })
+        with (
+            patch.object(usage_mod, "resolve_antigravity_binary", return_value="/usr/local/bin/agy"),
+            patch("subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=tsv_json)),
+        ):
+            snap = fetch_antigravity_usage()
+            self.assertIsNotNone(snap)
+            self.assertEqual(len(snap.windows), 2)
+            self.assertEqual(snap.windows[0].label, "Gemini Models - Weekly Limit Remaining")
+            self.assertEqual(snap.windows[0].used_percent, 40.0)
+            self.assertEqual(snap.windows[1].label, "Claude and GPT models - Five Hour Limit Remaining")
+            self.assertEqual(snap.windows[1].used_percent, 10.0)
 
 
 class EndToEndWorkerAndConcurrencyTests(unittest.TestCase):
@@ -781,6 +884,22 @@ class CrossPlatformLinuxAndWindowsTests(unittest.TestCase):
                     source_token.read_text(encoding="utf-8"),
                     '{"access_token":"new_refreshed_token"}',
                 )
+
+
+class PackageAndSiblingImportsTests(unittest.TestCase):
+    def test_package_aware_sibling_imports_and_exports(self) -> None:
+        """Verify __package__ detection correctly imports sibling submodules and exports profiles."""
+        plugin_mod = sys.modules.get("hermes_antigravity_oauth")
+        self.assertIsNotNone(plugin_mod)
+        self.assertTrue(hasattr(plugin_mod, "AntigravityClient"))
+        self.assertTrue(hasattr(plugin_mod, "fetch_antigravity_usage"))
+        self.assertTrue(hasattr(plugin_mod, "get_model_catalog"))
+        self.assertTrue(hasattr(plugin_mod, "resolve_antigravity_binary"))
+        self.assertTrue(hasattr(plugin_mod, "AntigravityOAuthProfile"))
+        self.assertIn("gemini-4-hydrogen", plugin_mod._FALLBACK_FAMILIES)
+        self.assertIn("gemini-pro-orchestrator-g1-pro", plugin_mod._FALLBACK_FAMILIES)
+        self.assertIn("xhigh", plugin_mod.EFFORT_LEVELS)
+        self.assertIn("max", plugin_mod.EFFORT_LEVELS)
 
 
 if __name__ == "__main__":

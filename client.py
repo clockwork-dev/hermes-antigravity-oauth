@@ -19,7 +19,7 @@ from typing import Any
 
 from hermes_cli.auth_constants import AuthError
 
-try:
+if __package__:
     from . import models as _models
     from .debug import dump_prompt_if_enabled
     from .models import (
@@ -42,7 +42,14 @@ try:
     )
     from .prompt import build_prompt_from_messages, format_delta_messages
     from .stream import AntigravityStream, _AwaitableCompletion, collect_stream_completion
-except ImportError:
+else:
+    import os
+    import sys
+
+    _plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if _plugin_dir not in sys.path:
+        sys.path.insert(0, _plugin_dir)
+
     import models as _models  # type: ignore[no-redef]
     from debug import dump_prompt_if_enabled  # type: ignore[no-redef]
     from models import (  # type: ignore[no-redef]
@@ -225,18 +232,16 @@ class AntigravityClient:
 
     @staticmethod
     def _normalize_reasoning_effort(raw_effort: Any) -> str | None:
-        """Map Hermes/OpenAI reasoning_effort strings onto `agy` effort levels (`low`, `medium`, `high`)."""
+        """Map Hermes/OpenAI reasoning_effort strings onto `agy` effort levels."""
         if not isinstance(raw_effort, str):
             return None
         cleaned = raw_effort.strip().lower()
         if not cleaned or cleaned in ("auto", "default"):
             return None
-        if cleaned in ("none", "minimal", "low"):
+        if cleaned in ("none", "minimal"):
             return "low"
-        if cleaned == "medium":
-            return "medium"
-        if cleaned in ("high", "xhigh", "max"):
-            return "high"
+        if cleaned in EFFORT_LEVELS:
+            return cleaned
         return None
 
     def _resolve_model_and_effort(

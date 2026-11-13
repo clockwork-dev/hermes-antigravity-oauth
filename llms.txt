@@ -174,8 +174,10 @@ Maps raw CLI errors and log patterns to Hermes `FailoverReason` enum values:
 ## 7. Model Catalog & Reasoning Effort Resolution
 
 1. **Dynamic Catalog Discovery (`get_model_catalog`)**:
-   Runs `agy models` on demand and caches for 300 seconds. Parsed families return supported effort levels:
+   Runs `agy models` on demand and caches for 300 seconds. Parsed families return supported effort levels (`low`, `medium`, `high`, `xhigh`, `max`):
    - `gemini-4-argon`: `("low", "medium", "high")`
+   - `gemini-4-hydrogen`: `("low", "medium", "high", "xhigh")`
+   - `gemini-pro-orchestrator-g1-pro`: `()` (adaptive thinking)
    - `gemini-3.8-flash`: `("low", "medium", "high")`
    - `claude-sonnet-5-5` / `claude-opus-5-5`: `("low", "medium", "high")`
    - `claude-sonnet-4-6` / `claude-opus-4-6-thinking`: `()` (effortless family)

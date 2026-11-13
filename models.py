@@ -10,13 +10,20 @@ import threading
 import time
 from typing import Any
 
-try:
+if __package__:
     from .process import (
         build_clean_child_env,
         resolve_antigravity_binary,
         setup_isolated_home,
     )
-except ImportError:
+else:
+    import os
+    import sys
+
+    _plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if _plugin_dir not in sys.path:
+        sys.path.insert(0, _plugin_dir)
+
     from process import (  # type: ignore[no-redef]
         build_clean_child_env,
         resolve_antigravity_binary,
@@ -25,11 +32,13 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high")
+EFFORT_LEVELS: tuple[str, ...] = ("low", "medium", "high", "xhigh", "max")
 
 # Static fallback families used when `agy models` cannot be queried offline.
 _FALLBACK_FAMILIES: dict[str, tuple[str, ...]] = {
     "gemini-4-argon": ("low", "medium", "high"),
+    "gemini-4-hydrogen": ("low", "medium", "high", "xhigh"),
+    "gemini-pro-orchestrator-g1-pro": (),
     "gemini-3.8-flash": ("low", "medium", "high"),
     "claude-opus-5-5": ("low", "medium", "high"),
     "claude-sonnet-5-5": ("low", "medium", "high"),
@@ -41,8 +50,10 @@ DEFAULT_MODEL = "gemini-3.8-flash"
 MODEL_ALIASES: dict[str, str] = {
     # Convenience short names
     "gemini-argon": "gemini-4-argon",
+    "gemini-hydrogen": "gemini-4-hydrogen",
     "gemini-flash": "gemini-3.8-flash",
     "gemini-pro": "gemini-4-argon",
+    "gemini-orchestrator": "gemini-pro-orchestrator-g1-pro",
     "claude-sonnet": "claude-sonnet-5-5",
     "claude-opus": "claude-opus-5-5",
     "gpt-oss": "gpt-oss-120b",

@@ -10,17 +10,25 @@ import tempfile
 import threading
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agent.account_usage import AccountUsageSnapshot, AccountUsageWindow
+if TYPE_CHECKING:
+    from agent.account_usage import AccountUsageSnapshot, AccountUsageWindow
 
-try:
+if __package__:
     from .process import (
         build_clean_child_env,
         resolve_antigravity_binary,
         setup_isolated_home,
     )
-except ImportError:
+else:
+    import os
+    import sys
+
+    _plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if _plugin_dir not in sys.path:
+        sys.path.insert(0, _plugin_dir)
+
     from process import (  # type: ignore[no-redef]
         build_clean_child_env,
         resolve_antigravity_binary,
@@ -68,6 +76,8 @@ def _parse_iso_datetime(raw: Any) -> datetime | None:
 
 def _run_usage_subprocess() -> AccountUsageSnapshot | None:
     """Invoke `agy -p "/usage" --output-format json` inside an isolated temporary HOME."""
+    from agent.account_usage import AccountUsageSnapshot, AccountUsageWindow
+
     binary = resolve_antigravity_binary()
     if not binary:
         return None
@@ -108,36 +118,136 @@ def _run_usage_subprocess() -> AccountUsageSnapshot | None:
     if not isinstance(payload, dict):
         return None
 
-    tier = str(payload.get("tier") or "Subscription").strip()
-    raw_models = payload.get("models")
-    if not isinstance(raw_models, list):
-        return None
+    tier = str(
+        payload.get("tier")
+        or payload.get("plan")
+        or (
+            payload.get("command", {}).get("data", {}).get("plan")
+            if isinstance(payload.get("command"), dict) and isinstance(payload.get("command", {}).get("data"), dict)
+            else None
+        )
+        or "Subscription"
+    ).strip()
 
     windows: list[AccountUsageWindow] = []
     seen_labels: set[str] = set()
-    for item in raw_models:
-        if not isinstance(item, dict):
-            continue
-        label = str(item.get("displayName") or item.get("model") or "Model").strip()
-        if label in seen_labels:
-            continue
-        seen_labels.add(label)
 
-        raw_pct = item.get("remainingPercentage")
-        used_pct: float | None = None
-        if isinstance(raw_pct, (int, float)) and not isinstance(raw_pct, bool):
-            remaining_clamped = max(0.0, min(1.0, float(raw_pct)))
-            used_pct = round((1.0 - remaining_clamped) * 100.0, 1)
+    # 1. agy 1.5.8+ modern quota schema: command.data.groups & buckets
+    cmd_data = payload.get("command")
+    if isinstance(cmd_data, dict):
+        data_obj = cmd_data.get("data")
+        if isinstance(data_obj, dict):
+            raw_groups = data_obj.get("groups")
+            if isinstance(raw_groups, list):
+                for grp in raw_groups:
+                    if not isinstance(grp, dict):
+                        continue
+                    grp_name = str(grp.get("name") or "").strip()
+                    buckets = grp.get("buckets")
+                    if not isinstance(buckets, list):
+                        continue
+                    for bucket in buckets:
+                        if not isinstance(bucket, dict):
+                            continue
+                        b_name = str(bucket.get("name") or bucket.get("id") or "").strip()
+                        if grp_name and b_name:
+                            if grp_name.lower() in b_name.lower():
+                                label = b_name
+                            else:
+                                label = f"{grp_name} - {b_name}"
+                        else:
+                            label = grp_name or b_name or "Quota"
 
-        reset_dt = _parse_iso_datetime(item.get("resetTime"))
-        windows.append(
-            AccountUsageWindow(
-                label=label,
-                used_percent=used_pct,
-                reset_at=reset_dt,
-                scope="model",
-            )
-        )
+                        if label in seen_labels:
+                            continue
+                        seen_labels.add(label)
+
+                        raw_fraction = bucket.get("remaining_fraction")
+                        used_pct: float | None = None
+                        if isinstance(raw_fraction, (int, float)) and not isinstance(raw_fraction, bool):
+                            rem_clamped = max(0.0, min(1.0, float(raw_fraction)))
+                            used_pct = round((1.0 - rem_clamped) * 100.0, 1)
+
+                        reset_dt = _parse_iso_datetime(bucket.get("reset_time"))
+                        windows.append(
+                            AccountUsageWindow(
+                                label=label,
+                                used_percent=used_pct,
+                                reset_at=reset_dt,
+                                scope="model",
+                            )
+                        )
+
+    # 2. Legacy schema: payload.get("models")
+    if not windows:
+        raw_models = payload.get("models")
+        if isinstance(raw_models, list):
+            for item in raw_models:
+                if not isinstance(item, dict):
+                    continue
+                label = str(item.get("displayName") or item.get("model") or "Model").strip()
+                if label in seen_labels:
+                    continue
+                seen_labels.add(label)
+
+                raw_pct = item.get("remainingPercentage")
+                used_pct = None
+                if isinstance(raw_pct, (int, float)) and not isinstance(raw_pct, bool):
+                    remaining_clamped = max(0.0, min(1.0, float(raw_pct)))
+                    used_pct = round((1.0 - remaining_clamped) * 100.0, 1)
+
+                reset_dt = _parse_iso_datetime(item.get("resetTime"))
+                windows.append(
+                    AccountUsageWindow(
+                        label=label,
+                        used_percent=used_pct,
+                        reset_at=reset_dt,
+                        scope="model",
+                    )
+                )
+
+    # 3. TSV fallback: payload.get("response")
+    if not windows:
+        raw_resp = payload.get("response")
+        if isinstance(raw_resp, str) and "\t" in raw_resp:
+            for line in raw_resp.strip().splitlines():
+                parts = [p.strip() for p in line.split("\t")]
+                if len(parts) >= 3:
+                    grp_name, b_name, pct_str = parts[0], parts[1], parts[2]
+                    reset_str = parts[3] if len(parts) > 3 else None
+                    if grp_name and b_name:
+                        if grp_name.lower() in b_name.lower():
+                            label = b_name
+                        else:
+                            label = f"{grp_name} - {b_name}"
+                    else:
+                        label = grp_name or b_name or "Quota"
+
+                    if label in seen_labels:
+                        continue
+                    seen_labels.add(label)
+
+                    used_pct = None
+                    if pct_str.endswith("%"):
+                        try:
+                            rem_val = float(pct_str[:-1].strip())
+                            rem_clamped = max(0.0, min(100.0, rem_val)) / 100.0
+                            used_pct = round((1.0 - rem_clamped) * 100.0, 1)
+                        except ValueError:
+                            pass
+
+                    reset_dt = _parse_iso_datetime(reset_str)
+                    windows.append(
+                        AccountUsageWindow(
+                            label=label,
+                            used_percent=used_pct,
+                            reset_at=reset_dt,
+                            scope="model",
+                        )
+                    )
+
+    if not windows:
+        return None
 
     return AccountUsageSnapshot(
         provider="antigravity-oauth",
@@ -146,7 +256,6 @@ def _run_usage_subprocess() -> AccountUsageSnapshot | None:
         title="Google Antigravity Subscription",
         plan=tier,
         windows=tuple(windows),
-        usage_window=True,
     )
 
 

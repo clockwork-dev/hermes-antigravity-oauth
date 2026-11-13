@@ -9,7 +9,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-gray?style=flat-square" alt="License"></a>
 </p>
 
-A high-performance `model-provider` plugin for **[Hermes Agent](https://github.com/nousresearch/hermes-agent)** that connects your **Google Antigravity** subscription (Gemini 4 Argon, Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, GPT-OSS 120B) via official OAuth through Google's `agy` CLI binary.
+A high-performance `model-provider` plugin for **[Hermes Agent](https://github.com/nousresearch/hermes-agent)** that connects your **Google Antigravity** subscription (Gemini 4 Argon, Gemini 4 Hydrogen, Gemini Pro Orchestrator, Gemini 3.8 Flash, Claude Sonnet 5.5, Claude Opus 5.5, GPT-OSS 120B) via official OAuth through Google's `agy` CLI binary.
 
 ---
 
@@ -39,7 +39,7 @@ A high-performance `model-provider` plugin for **[Hermes Agent](https://github.c
                            ▼
 ┌────────────────────────────────────────────────────────┐
 │               Google Antigravity Service               │
-│   (Gemini 4 Argon · Gemini 3.8 Flash · Claude 5.5)     │
+│   (Gemini 4 Argon/Hydrogen · Flash · Claude 5.5)       │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -50,6 +50,8 @@ A high-performance `model-provider` plugin for **[Hermes Agent](https://github.c
 | Model | Provider Family | Reasoning Effort | Context Window | Best For |
 | :--- | :--- | :--- | :--- | :--- |
 | **`gemini-4-argon`** | Google Gemini 4 | `low`, `medium`, `high` | 1,000,000 | Deep thinking, complex reasoning, mathematics |
+| **`gemini-4-hydrogen`** | Google Gemini 4 | `low`, `medium`, `high`, `xhigh` | 1,000,000 | Next-gen multimodal reasoning, deep analysis |
+| **`gemini-pro-orchestrator-g1-pro`** | Google Gemini Pro | Adaptive thinking | 1,000,000 | Multi-agent coordination and orchestration |
 | **`gemini-3.8-flash`** *(Default)* | Google Gemini 3.8 | `low`, `medium`, `high` | 1,000,000 | Daily coding, rapid iteration, chat |
 | **`claude-sonnet-5-5`** | Anthropic Claude 5.5 | `low`, `medium`, `high` | 200,000 | Architecture, heavy refactoring, tool calling |
 | **`claude-opus-5-5`** | Anthropic Claude 5.5 | `low`, `medium`, `high` | 200,000 | Deep analysis, scientific research |
@@ -58,6 +60,8 @@ A high-performance `model-provider` plugin for **[Hermes Agent](https://github.c
 > [!TIP]
 > **Automatic Aliases & Fallbacks**: Shorthand and legacy names are routed automatically:
 > - `gemini-pro`, `gemini-3.1-pro` ➔ `gemini-4-argon`
+> - `gemini-hydrogen` ➔ `gemini-4-hydrogen`
+> - `gemini-orchestrator` ➔ `gemini-pro-orchestrator-g1-pro`
 > - `gemini-flash` ➔ `gemini-3.8-flash`
 > - `claude-sonnet`, `claude-sonnet-4-6` ➔ `claude-sonnet-5-5`
 > - `claude-opus`, `claude-opus-4-6-thinking` ➔ `claude-opus-5-5`
@@ -158,7 +162,7 @@ Run Hermes's built-in model selector:
 ```bash
 hermes model
 ```
-Select **Google Antigravity OAuth** from the list, choose your model, and pick the reasoning effort (`low`, `medium`, or `high`).
+Select **Google Antigravity OAuth** from the list, choose your model, and pick the reasoning effort (`low`, `medium`, `high`, `xhigh`, or `max`).
 
 ### 2. Single-Command Query
 Run a quick query from your shell:

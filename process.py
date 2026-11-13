@@ -312,7 +312,14 @@ def _check_windows_credential_manager_auth() -> bool:
     """
     system_root = os.environ.get("SystemRoot") or os.environ.get("WINDIR") or r"C:\Windows"
     cmdkey_candidate = os.path.join(system_root, "System32", "cmdkey.exe")
-    cmdkey_bin = cmdkey_candidate if os.path.isfile(cmdkey_candidate) else (shutil.which("cmdkey") or "")
+    cmdkey_bin = ""
+    if os.path.isfile(cmdkey_candidate):
+        cmdkey_bin = cmdkey_candidate
+    else:
+        try:
+            cmdkey_bin = shutil.which("cmdkey") or ""
+        except (AttributeError, OSError):
+            cmdkey_bin = "cmdkey" if sys.platform == "win32" else ""
     if not cmdkey_bin:
         return False
 

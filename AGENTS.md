@@ -19,11 +19,11 @@ ProviderProfile (`AntigravityOAuthProfile` in __init__.py)
 SDK Client (`AntigravityClient` in client.py)
      │
      ├─► Persistent Worker Subprocess (`_ensure_worker`)
-     │   `agy --input-format stream-json --output-format stream-json --model <id>`
+     │   `agy --input-format stream-json --output-format stream-json --model <id> [--effort <low|medium|high|xhigh|max>]`
      │   (Held via `_worker_lock`; turns piped via stdin as NDJSON: `{"event": "user", ...}`)
      │
      └─► Oneshot Subprocess (`_spawn_oneshot`)
-         `agy --output-format stream-json --model <id> [--conversation <id>]`
+         `agy --output-format stream-json --model <id> [--effort <low|medium|high|xhigh|max>] [--conversation <id>]`
          (Used for concurrent subagent turns or `--conversation` resumes)
 ```
 

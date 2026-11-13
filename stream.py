@@ -14,14 +14,21 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable
 
-try:
+if __package__:
     from .delivery import warn_if_short_delivery
     from .process import (
         StderrDrainer,
         terminate_process_group,
         watch_log_for_errors,
     )
-except ImportError:
+else:
+    import os
+    import sys
+
+    _plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if _plugin_dir not in sys.path:
+        sys.path.insert(0, _plugin_dir)
+
     from delivery import warn_if_short_delivery  # type: ignore[no-redef]
     from process import (  # type: ignore[no-redef]
         StderrDrainer,

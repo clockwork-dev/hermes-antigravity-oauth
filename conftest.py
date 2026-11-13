@@ -11,6 +11,10 @@ from pathlib import Path
 
 import pytest
 
+_hermes_root = Path.home() / ".hermes" / "hermes-agent"
+if _hermes_root.is_dir() and str(_hermes_root) not in sys.path:
+    sys.path.insert(0, str(_hermes_root))
+
 PLUGIN_DIR = Path(__file__).resolve().parent
 PACKAGE_NAME = "hermes_antigravity_oauth"
 PROVIDER_NAME = "antigravity-oauth"
